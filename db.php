@@ -1,5 +1,10 @@
 <?php
 date_default_timezone_set('Asia/Manila');
+
+session_set_cookie_params([
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 $pdo = new PDO(
     "pgsql:host=localhost;port=5432;dbname=classroom_cleanliness",
@@ -9,7 +14,15 @@ $pdo = new PDO(
 );
 
 function require_login() {
+    global $pdo;
     if (!isset($_SESSION['user_id'])) {
+        header('Location: login.php');
+        exit;
+    }
+    $stmt = $pdo->prepare("SELECT active FROM users WHERE user_id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    if (!$stmt->fetchColumn()) {
+        session_destroy();
         header('Location: login.php');
         exit;
     }

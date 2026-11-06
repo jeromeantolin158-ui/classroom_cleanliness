@@ -1,5 +1,9 @@
 <?php
-session_start();
-session_destroy();
+require 'db.php';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $_SESSION = [];
+    session_destroy();
+}
 header('Location: login.php');
-    
+exit;

@@ -84,6 +84,7 @@ function rateable(
         WHERE r2.usage_date = ?
           AND p.time_out IS NOT NULL
           AND p.section_id <> sc2.section_id
+          AND p.time_out <= r2.time_in
           AND r2.time_in - p.time_out <= interval '2 hours'
     ";
 
@@ -191,7 +192,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Get rateable sessions
 // Admins see everything; section accounts see their own section.
-$rows = rateable($pdo, $today, null, $my_section);
+$rows = (!is_admin() && $my_section === null)
+    ? []
+    : rateable($pdo, $today, null, $my_section);
 
 ?>
 
