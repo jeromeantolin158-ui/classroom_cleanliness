@@ -83,19 +83,17 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<!DOCTYPE html>
-<html>
-<head><title>Room Usage</title></head>
-<body>
-    <a href="dashboard.php">&larr; Back to dashboard</a>
+<?php $title = 'usage'; include 'header.php'; ?>
+    
     <h2>Room Usage - <?= date('l, F j, Y') ?></h2>
 
-    <?php if ($message) echo "<p style='color:red'>" . htmlspecialchars($message) . "</p>"; ?>
+    <?php if ($message) echo "<p class='alert error'>" . htmlspecialchars($message) . "</p>"; ?>
 
     <?php if (!$rows): ?>
         <p>No classes to show today.</p>
     <?php else: ?>
-    <table border="1" cellpadding="6">
+    <div class="table-wrap">
+        <table>
         <tr><th>Room</th><th>Section</th><th>Scheduled</th><th>Time In</th><th>Time Out</th><th>Action</th></tr>
         <?php foreach ($rows as $row): ?>
         <tr>
@@ -127,7 +125,7 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </td>
         </tr>
         <?php endforeach; ?>
-    </table>
+        </table>
+    </div>
     <?php endif; ?>
-</body>
-</html>
+<?php include 'footer.php'; ?>

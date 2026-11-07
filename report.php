@@ -70,11 +70,8 @@ foreach ($rows as $r) {
     }
 }
 ?>
-<!DOCTYPE html>
-<html>
-<head><title>Weekly Report</title></head>
-<body>
-    <a href="dashboard.php">&larr; Back to dashboard</a>
+<?php $title = 'report'; include 'header.php'; ?>
+    
     <h2>Weekly Cleanliness Report</h2>
     <p><?= $start->format('M j, Y') ?> to <?= $end->format('M j, Y') ?></p>
     <?php if (!is_admin()): ?>
@@ -90,7 +87,8 @@ foreach ($rows as $r) {
     <?php if (!$rows): ?>
         <p>No ratings for this week.</p>
     <?php else: ?>
-    <table border="1" cellpadding="6">
+        <div class="table-wrap">
+    <table>
         <tr><th>Room</th><th>Section</th><th>Average</th><th>Ratings</th><th></th></tr>
         <?php foreach ($rows as $r): ?>
         <?php $lowest = $r['avg_score'] == $min[$r['room_id']]; ?>
@@ -103,11 +101,13 @@ foreach ($rows as $r) {
         </tr>
         <?php endforeach; ?>
     </table>
+    </div>
     <p><small>Scores: 5 = spotless, 1 = very dirty. Based on the next class's opinion, not an inspection.</small></p>
 
     <?php if ($comments): ?>
     <h3>Comments</h3>
-    <table border="1" cellpadding="6">
+        <div class="table-wrap">
+    <table>
         <tr><th>Date</th><th>Room</th><th>Class rated</th><th>Rated by</th><th>Score</th><th>Comment</th></tr>
         <?php foreach ($comments as $c): ?>
         <tr>
@@ -120,7 +120,7 @@ foreach ($rows as $r) {
         </tr>
         <?php endforeach; ?>
     </table>
+    </div>
     <?php endif; ?>
     <?php endif; ?>
-</body>
-</html>
+<?php include 'footer.php'; ?>

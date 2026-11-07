@@ -76,15 +76,12 @@ $users = $pdo->query("
     ORDER BY u.role, u.username
 ")->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<!DOCTYPE html>
-<html>
-<head><title>Users</title></head>
-<body>
-    <a href="dashboard.php">&larr; Back to dashboard</a>
+<?php $title = 'users'; include 'header.php'; ?>
+    
     <h2>Manage Users</h2>
 
-    <?php if ($message) echo "<p style='color:red'>" . htmlspecialchars($message) . "</p>"; ?>
-    <?php if ($ok) echo "<p style='color:green'>" . htmlspecialchars($ok) . "</p>"; ?>
+    <?php if ($message) echo "<p class='alert error'>" . htmlspecialchars($message) . "</p>"; ?>
+    <?php if ($ok) echo "<p class='alert ok'>" . htmlspecialchars($ok) . "</p>"; ?>
 
     <h3>Add account</h3>
     <form method="post" autocomplete="off">
@@ -107,7 +104,8 @@ $users = $pdo->query("
     </form>
 
     <h3>Accounts</h3>
-    <table border="1" cellpadding="6">
+    <div class="table-wrap">
+        <table>
         <tr><th>Username</th><th>Name</th><th>Role</th><th>Section</th><th>Status</th><th>Actions</th></tr>
         <?php foreach ($users as $u): ?>
         <tr>
@@ -136,6 +134,7 @@ $users = $pdo->query("
             </td>
         </tr>
         <?php endforeach; ?>
-    </table>
-</body>
-</html>
+        </table>
+    </div>
+
+<?php include 'footer.php'; ?>

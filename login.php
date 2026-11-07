@@ -33,16 +33,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html>
-<head><title>Login</title></head>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login</title>
+<link rel="stylesheet" href="style.css">
+</head>
 <body>
-    <h2>Classroom Cleanliness System</h2>
-    <?php if ($error) echo "<p style='color:red'>" . htmlspecialchars($error) . "</p>"; ?>
+<div class="card login-box">
+    <h2>Classroom Cleanliness</h2>
+    <p class="sub">Log in to continue</p>
+    <?php if ($error) echo "<p class=\"alert error\">" . htmlspecialchars($error) . "</p>"; ?>
     <form method="post">
         <?= csrf_field() ?>
-        <input name="username" placeholder="Username" required><br><br>
-        <input name="password" type="password" placeholder="Password" required><br><br>
+        <input name="username" placeholder="Username" required autofocus>
+        <input name="password" type="password" placeholder="Password" required>
         <button type="submit">Log in</button>
     </form>
+</div>
 </body>
 </html>

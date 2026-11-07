@@ -60,14 +60,10 @@ if ($is_admin && $edit_id > 0) {
 
 $rooms = $pdo->query("SELECT * FROM rooms ORDER BY room_number, building")->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<!DOCTYPE html>
-<html>
-<head><title>Rooms</title></head>
-<body>
-    <a href="dashboard.php">&larr; Back to dashboard</a>
+<?php $title = 'rooms'; include 'header.php'; ?>
     <h2>Manage Rooms</h2>
 
-    <?php if ($message) echo "<p style='color:red'>" . htmlspecialchars($message) . "</p>"; ?>
+    <?php if ($message) echo "<p class='alert error'>" . htmlspecialchars($message) . "</p>"; ?>
 
     <?php if ($is_admin): ?>
     <form method="post">
@@ -88,7 +84,8 @@ $rooms = $pdo->query("SELECT * FROM rooms ORDER BY room_number, building")->fetc
     <?php endif; ?>
 
     <br>
-    <table border="1" cellpadding="6">
+    <div class="table-wrap">
+        <table>
         <tr>
             <th>ID</th><th>Room Number</th><th>Building</th>
             <?php if ($is_admin) echo '<th>Actions</th>'; ?>
@@ -112,6 +109,6 @@ $rooms = $pdo->query("SELECT * FROM rooms ORDER BY room_number, building")->fetc
             <?php endif; ?>
         </tr>
         <?php endforeach; ?>
-    </table>
-</body>
-</html>
+        </table>
+    </div>
+<?php include 'footer.php'; ?>

@@ -198,16 +198,9 @@ $rows = (!is_admin() && $my_section === null)
 
 ?>
 
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Rate Rooms</title>
-</head>
+<?php $title = 'rate'; include 'header.php'; ?>
 
-<body>
-
-    <a href="dashboard.php">&larr; Back to dashboard</a>
-
+    
     <h2>Rate Room Cleanliness - <?= date('l, F j, Y') ?></h2>
 
     <p>Rate how clean the previous class left the room.</p>
@@ -230,7 +223,7 @@ $rows = (!is_admin() && $my_section === null)
 
     <?php else: ?>
 
-        <table border="1" cellpadding="6">
+        <div class="table-wrap">
 
             <tr>
                 <th>Room</th>
@@ -323,9 +316,8 @@ $rows = (!is_admin() && $my_section === null)
 
             <?php endforeach; ?>
 
-        </table>
+        </div>
 
     <?php endif; ?>
 
-</body>
-</html>
+<?php include 'footer.php'; ?>

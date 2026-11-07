@@ -82,14 +82,11 @@ $schedules = $pdo->query("
     ORDER BY sc.day_of_week, sc.start_time, r.room_number
 ")->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<!DOCTYPE html>
-<html>
-<head><title>Schedules</title></head>
-<body>
-    <a href="dashboard.php">&larr; Back to dashboard</a>
+<?php $title = 'schedules'; include 'header.php'; ?>
+    
     <h2>Manage Schedules</h2>
 
-    <?php if ($message) echo "<p style='color:red'>" . htmlspecialchars($message) . "</p>"; ?>
+    <?php if ($message) echo "<p class='alert error'>" . htmlspecialchars($message) . "</p>"; ?>
 
     <?php if ($is_admin): ?>
     <form method="post">
@@ -137,7 +134,8 @@ $schedules = $pdo->query("
     <?php endif; ?>
 
     <br>
-    <table border="1" cellpadding="6">
+    <div class="table-wrap">
+        <table> 
         <tr>
             <th>Day</th><th>Time</th><th>Section</th><th>Room</th>
             <?php if ($is_admin) echo '<th>Actions</th>'; ?>
@@ -162,6 +160,6 @@ $schedules = $pdo->query("
             <?php endif; ?>
         </tr>
         <?php endforeach; ?>
-    </table>
-</body>
-</html>
+        </table>
+    </div>
+<?php include 'footer.php'; ?>

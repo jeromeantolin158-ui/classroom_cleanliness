@@ -59,14 +59,11 @@ if ($is_admin && $edit_id > 0) {
 
 $sections = $pdo->query("SELECT * FROM sections ORDER BY section_name")->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<!DOCTYPE html>
-<html>
-<head><title>Sections</title></head>
-<body>
-    <a href="dashboard.php">&larr; Back to dashboard</a>
+<?php $title = 'Sections'; include 'header.php'; ?>
+    
     <h2>Manage Sections</h2>
 
-    <?php if ($message) echo "<p style='color:red'>" . htmlspecialchars($message) . "</p>"; ?>
+    <?php if ($message) echo "<p class='alert error'>" . htmlspecialchars($message) . "</p>"; ?>
 
     <?php if ($is_admin): ?>
     <form method="post">
@@ -88,7 +85,8 @@ $sections = $pdo->query("SELECT * FROM sections ORDER BY section_name")->fetchAl
     <?php endif; ?>
 
     <br>
-    <table border="1" cellpadding="6">
+    <div class="table-wrap">
+        <table>
         <tr>
             <th>ID</th><th>Section</th><th>Program</th>
             <?php if ($is_admin) echo '<th>Actions</th>'; ?>
@@ -112,6 +110,6 @@ $sections = $pdo->query("SELECT * FROM sections ORDER BY section_name")->fetchAl
             <?php endif; ?>
         </tr>
         <?php endforeach; ?>
+    </div>
     </table>
-</body>
-</html>
+<?php include 'footer.php'; ?>
