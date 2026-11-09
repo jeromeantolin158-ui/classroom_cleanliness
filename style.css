@@ -93,7 +93,27 @@ h1.title { font-size: 2.4rem; text-align: center; line-height: 1.1; margin: 28px
 
 /* Sticky footer */
 .footer { background: var(--dark); color: #dcfce7; text-align: center; padding: 14px 16px; font-size: .9rem; }
+/* Center text on admin and student pages */
+main.container h2,
+main.container h3,
+main.container .sub,
+main.container > p,
+main.container .empty { text-align: center; }
 
+/* Center text inside tables */
+th, td { text-align: center !important; }
+
+/* Center cards and tiles */
+.tile, .card { text-align: center; }
+
+/* Center forms (Add Room, Add Schedule, etc.) */
+main.container form:not([style*="inline"]) { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 16px; }
+
+/* Keep the laptop welcome heading centered too */
+@media (min-width: 900px) {
+  .hello { text-align: center; }
+  .next { margin-left: auto; margin-right: auto; }
+}
 @media (max-width: 600px) {
   .nav .brand { width: 100%; }
   th, td { padding: 8px !important; }
