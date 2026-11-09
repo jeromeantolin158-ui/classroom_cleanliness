@@ -24,8 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($action === 'in') {
             $sid = (int)($_POST['schedule_id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT start_time, end_time FROM schedules WHERE schedule_id = ? AND day_of_week = ? AND section_id = ?");
-            $stmt->execute([$sid, (int)date('N'), $my_section]);
+            $stmt = $pdo->prepare("SELECT start_time, end_time FROM schedules AND ?::date BETWEEN valid_from AND valid_to, and its execute to [$sid, (int)date('N'), $my_section, $today]");
+            $stmt->execute([$sid, (int)date('N'), $my_section, $today]);
             $sc = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$sc) {
@@ -70,8 +70,8 @@ $sql = "
     JOIN sections s ON s.section_id = sc.section_id
     JOIN rooms r ON r.room_id = sc.room_id
     LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
-    WHERE sc.day_of_week = ?";
-$params = [date('Y-m-d'), (int)date('N')];
+    WHERE sc.day_of_week = ? AND ?::date BETWEEN sc.valid_from AND sc.valid_to";
+$params = [date('Y-m-d'), (int)date('N'), date('Y-m-d')];
 
 if (!is_admin()) {
     $sql .= " AND sc.section_id = ?";

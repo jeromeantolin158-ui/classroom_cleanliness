@@ -20,9 +20,9 @@ if (is_admin()) {
         JOIN rooms r ON r.room_id = sc.room_id
         JOIN sections s ON s.section_id = sc.section_id
         LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
-        WHERE sc.day_of_week = ?
+        WHERE sc.day_of_week = ? AND ?::date BETWEEN sc.valid_from AND sc.valid_to
         ORDER BY r.room_number, sc.start_time");
-    $stmt->execute([$today, $dow]);
+    $stmt->execute([$today, $dow, $today]);
     $todays = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // This week's averages per room and section
@@ -62,9 +62,106 @@ if (is_admin()) {
         WHERE rt.comment IS NOT NULL
         ORDER BY rt.rated_at DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
 
+    $nowT = date('H:i:s');
+
+    // Room status right now
+    $stmt = $pdo->prepare("
+        SELECT rm.room_id, rm.room_number, rm.building,
+            (SELECT s.section_name FROM room_usage u
+               JOIN schedules sc ON sc.schedule_id = u.schedule_id
+               JOIN sections s ON s.section_id = sc.section_id
+              WHERE sc.room_id = rm.room_id AND u.usage_date = ?
+                AND u.time_in IS NOT NULL AND u.time_out IS NULL
+              LIMIT 1) AS occupant,
+            (SELECT s.section_name FROM schedules sc
+               JOIN sections s ON s.section_id = sc.section_id
+              WHERE sc.room_id = rm.room_id AND sc.day_of_week = ?
+                AND ?::time BETWEEN sc.start_time AND sc.end_time
+                AND ?::date BETWEEN sc.valid_from AND sc.valid_to
+              LIMIT 1) AS scheduled_now
+        FROM rooms rm
+        ORDER BY rm.building NULLS LAST, rm.room_number");
+    $stmt->execute([$today, $dow, $nowT, $today]);
+    $roomStatus = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $total_rooms = count($roomStatus);
+    $occupied = count(array_filter($roomStatus, fn($r) => $r['occupant'] !== null));
+
+    $bFilter = $_GET['building'] ?? '';
+    $bList = array_values(array_unique(array_map(fn($r) => $r['building'] ?? '(No building)', $roomStatus)));
+    $shown = array_filter($roomStatus, fn($r) => $bFilter === '' || ($r['building'] ?? '(No building)') === $bFilter);
+
+    // Classes that started today but have not timed in
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM schedules sc
+        LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
+        WHERE sc.day_of_week = ? AND sc.start_time < ?::time
+          AND sc.end_time > ?::time AND u.usage_id IS NULL
+          AND ?::date BETWEEN sc.valid_from AND sc.valid_to");
+    $stmt->execute([$today, $dow, $nowT, $nowT, $today]);
+    $late = (int)$stmt->fetchColumn();
+
+    // Sections and rooms per building
+    $buildings = $pdo->query("
+        SELECT COALESCE(rm.building, '(No building)') AS building,
+               COUNT(DISTINCT rm.room_id) AS rooms,
+               COUNT(DISTINCT sc.section_id) AS sections
+        FROM rooms rm
+        LEFT JOIN schedules sc ON sc.room_id = rm.room_id
+        GROUP BY COALESCE(rm.building, '(No building)')
+        ORDER BY 1")->fetchAll(PDO::FETCH_ASSOC);
+
     include 'header.php'; ?>
     <h2>Welcome, <?= htmlspecialchars($_SESSION['full_name']) ?></h2>
     <p class="sub">Overview for <?= date('l, F j, Y') ?></p>
+
+    <div class="stats">
+        <div class="stat"><b><?= $total_rooms ?></b><span>Total rooms</span></div>
+        <div class="stat"><b><?= $occupied ?></b><span>Occupied now</span></div>
+        <div class="stat"><b><?= $total_rooms - $occupied ?></b><span>Vacant</span></div>
+        <div class="stat <?= $late ? 'warn' : '' ?>"><b><?= $late ?></b><span>Late, not timed in</span></div>
+    </div>
+
+    <h3>Room status</h3>
+    <form method="get">
+        <select name="building" onchange="this.form.submit()">
+            <option value="">All buildings</option>
+            <?php foreach ($bList as $b): ?>
+                <option value="<?= htmlspecialchars($b) ?>" <?= $bFilter === $b ? 'selected' : '' ?>><?= htmlspecialchars($b) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+    <?php if (!$roomStatus): ?>
+        <p class="empty">No rooms yet.</p>
+    <?php else: ?>
+    <div class="table-wrap"><table>
+        <tr><th>Room</th><th>Status</th><th>Section</th></tr>
+        <?php foreach ($roomStatus as $r): ?>
+        <?php
+            if ($r['occupant'] !== null)          { $st = 'Occupied'; $cls = 'busy'; $who = $r['occupant']; }
+            elseif ($r['scheduled_now'] !== null) { $st = 'Expected'; $cls = 'exp';  $who = $r['scheduled_now']; }
+            else                                  { $st = 'Vacant';   $cls = 'free'; $who = '-'; }
+        ?>
+        <tr>
+            <td><?= htmlspecialchars($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></td>
+            <td><span class="pill <?= $cls ?>"><?= $st ?></span></td>
+            <td><?= htmlspecialchars($who) ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
+    <?php endif; ?>
+
+    <h3>Sections per building</h3>
+    <div class="table-wrap"><table>
+        <tr><th>Building</th><th>Rooms</th><th>Sections with classes</th></tr>
+        <?php foreach ($buildings as $b): ?>
+        <tr>
+            <td><?= htmlspecialchars($b['building']) ?></td>
+            <td><?= (int)$b['rooms'] ?></td>
+            <td><?= (int)$b['sections'] ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
 
     <h3>Today's classes</h3>
     <?php if (!$todays): ?>
@@ -145,8 +242,9 @@ if ($sid) {
         JOIN rooms r ON r.room_id = sc.room_id
         LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
         WHERE sc.day_of_week = ? AND sc.section_id = ?
+          AND ?::date BETWEEN sc.valid_from AND sc.valid_to
         ORDER BY sc.start_time");
-    $stmt->execute([$today, $dow, $sid]);
+    $stmt->execute([$today, $dow, $sid, $today]);
     $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $stmt = $pdo->prepare("
