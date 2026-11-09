@@ -1,5 +1,6 @@
 <?php
 $current = basename($_SERVER['SCRIPT_NAME']);
+$admin = is_admin();
 function nav_link(string $file, string $label): string {
     global $current;
     $cls = $current === $file ? ' class="active"' : '';
@@ -14,24 +15,19 @@ function nav_link(string $file, string $label): string {
 <title><?= htmlspecialchars($title ?? 'Classroom Cleanliness') ?></title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<nav class="nav">
-    <span class="brand">Classroom Cleanliness</span>
-    <div class="links">
-        <?= nav_link('dashboard.php', 'Home') ?>
-        <?= nav_link('usage.php', 'Room Usage') ?>
-        <?= nav_link('rate.php', 'Rate Rooms') ?>
-        <?= nav_link('report.php', 'Report') ?>
-        <?php if (is_admin()): ?>
-            <?= nav_link('rooms.php', 'Rooms') ?>
-            <?= nav_link('sections.php', 'Sections') ?>
-            <?= nav_link('schedules.php', 'Schedules') ?>
-            <?= nav_link('users.php', 'Users') ?>
-        <?php endif; ?>
-        <form method="post" action="logout.php" style="display:inline">
-            <?= csrf_field() ?>
-            <button type="submit">Log out</button>
-        </form>
+<body class="student <?= $admin ? 'admin' : '' ?>">
+<?php if ($admin): ?>
+<header class="sheader">
+    <a class="logo" href="dashboard.php">CICI</a>
+</header>
+<?php else: ?>
+<header class="sheader">
+    <a class="logo" href="dashboard.php">CICI</a>
+    <div class="hbtns">
+        <?php foreach (($header_buttons ?? []) as [$label, $href]): ?>
+            <a class="hbtn" href="<?= htmlspecialchars($href) ?>"><?= htmlspecialchars($label) ?></a>
+        <?php endforeach; ?>
     </div>
-</nav>
+</header>
+<?php endif; ?>
 <main class="container">

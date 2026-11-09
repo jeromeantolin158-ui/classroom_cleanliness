@@ -40,17 +40,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <title>Login</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<div class="card login-box">
-    <h2>Classroom Cleanliness</h2>
-    <p class="sub">Log in to continue</p>
-    <?php if ($error) echo "<p class=\"alert error\">" . htmlspecialchars($error) . "</p>"; ?>
-    <form method="post">
-        <?= csrf_field() ?>
-        <input name="username" placeholder="Username" required autofocus>
-        <input name="password" type="password" placeholder="Password" required>
-        <button type="submit">Log in</button>
-    </form>
-</div>
+<body class="landing">
+<div class="landing-top"><span class="logo">CICI</span></div>
+<main class="container">
+    <h1 class="title">Classroom<br>Cleanliness</h1>
+    <p class="tagline">Cleanliness Today,<br>Excellence Tomorrow!</p>
+
+    <div class="card login-box">
+        <?php if ($error) echo "<p class='alert error'>" . htmlspecialchars($error) . "</p>"; ?>
+        <form method="post">
+            <?= csrf_field() ?>
+            <label for="u">Username:</label>
+            <input id="u" name="username" required autofocus>
+            <label for="p">Password:</label>
+            <input id="p" name="password" type="password" required>
+            <div class="actions">
+                <a class="btn" href="#about">About</a>
+                <button type="submit" class="btn">Log in</button>
+            </div>
+        </form>
+    </div>
+
+    <section id="about" class="card">
+        <h2>About Classroom Cleanliness</h2>
+        <p>Maintaining a clean and healthy school environment is everyone's responsibility. Our Cleanliness Monitoring System is designed to promote cleanliness, discipline, and environmental awareness by monitoring and evaluating the cleanliness of classrooms and school facilities. Through daily cleanliness ratings, proper waste management, and regular evaluations, we aim to encourage students and school personnel to take responsibility for keeping their surroundings clean and organized. Together, let's build a cleaner, healthier, and more comfortable learning environment for everyone. "Clean Surroundings, Healthy Minds, Brighter Futures!"</p>
+    </section>
+</main>
+<footer class="footer">Classroom Cleanliness</footer>
 </body>
 </html>
