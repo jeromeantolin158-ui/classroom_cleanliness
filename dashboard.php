@@ -213,7 +213,9 @@ if (is_admin()) {
             <td><?= htmlspecialchars($c['section_name']) ?></td>
             <td><?= htmlspecialchars($c['rated_by']) ?></td>
             <td><?= (int)$c['score'] ?>/5</td>
-            <td><?= htmlspecialchars($c['comment']) ?></td>
+            <td class="comment-cell">
+            <?= htmlspecialchars($c['comment']) ?>
+            </td>
         </tr>
         <?php endforeach; ?>
     </table></div>
@@ -319,7 +321,9 @@ include 'header.php';
         <td><?= htmlspecialchars($c['usage_date']) ?></td>
         <td><?= htmlspecialchars($c['room_number']) ?></td>
         <td><?= (int)$c['score'] ?>/5</td>
-        <td><?= htmlspecialchars($c['comment']) ?></td>
+        <td class="comment-cell">
+        <?= htmlspecialchars($c['comment']) ?>
+        </td>
     </tr>
     <?php endforeach; ?>
 </table></div>
