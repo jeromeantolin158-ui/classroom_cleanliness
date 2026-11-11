@@ -26,10 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($new === $current) {
         $message = 'The new password must be different from the current one.';
     } else {
-        $pdo->prepare("UPDATE users SET password_hash = ? WHERE user_id = ?")
+        $pdo->prepare("UPDATE users SET password_hash = ?, must_change = FALSE WHERE user_id = ?")
             ->execute([password_hash($new, PASSWORD_DEFAULT), $_SESSION['user_id']]);
         session_regenerate_id(true);
         $ok = 'Password changed.';
+        header('Location: dashboard.php');
+        exit;
     }
 }
 
@@ -40,12 +42,26 @@ $stmt = $pdo->prepare("
 $stmt->execute([$_SESSION['user_id']]);
 $me = $stmt->fetch(PDO::FETCH_ASSOC);
 
+$stmt = $pdo->prepare("SELECT must_change FROM users WHERE user_id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$forced = (bool)$stmt->fetchColumn();
+
 $title = 'Profile';
 $subtitle = 'Your account details and password.';
 include 'header.php';
 ?>
-<?php if ($message) echo "<p class='alert error'>" . htmlspecialchars($message) . "</p>"; ?>
-<?php if ($ok) echo "<p class='alert ok'>" . htmlspecialchars($ok) . "</p>"; ?>
+
+<?php if ($forced): ?>
+    <p class='alert error'>You are using a temporary password. Please choose your own to continue.</p>
+<?php endif; ?>
+
+<?php if ($message): ?>
+    <p class='alert error'><?= htmlspecialchars($message) ?></p>
+<?php endif; ?>
+
+<?php if ($ok): ?>
+    <p class='alert ok'><?= htmlspecialchars($ok) ?></p>
+<?php endif; ?>
 
 <div class="card login-box">
     <h3 style="margin-top:0">Profile</h3>
@@ -71,4 +87,5 @@ include 'header.php';
         <button type="submit" class="btn">Change password</button>
     </form>
 </div>
+
 <?php include 'footer.php'; ?>

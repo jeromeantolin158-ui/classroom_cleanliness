@@ -2,6 +2,8 @@
 require 'db.php';
 $error = '';
 
+if (!empty($_SESSION['user_id'])) { header('Location: dashboard.php'); exit; }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $username = mb_substr(trim($_POST['username'] ?? ''), 0, 50);
@@ -26,7 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: dashboard.php');
             exit;
         }
-
         $pdo->prepare("INSERT INTO login_attempts (username, ip) VALUES (?, ?)")->execute([$username, $ip]);
         $error = 'Wrong username or password.';
     }
@@ -37,35 +38,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login</title>
+<title>Sign in</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="login.css">
 </head>
-<body class="landing">
-<div class="landing-top"><span class="logo">CICI</span></div>
-<main class="container">
-    <h1 class="title">Classroom<br>Cleanliness</h1>
-    <p class="tagline">Cleanliness Today,<br>Excellence Tomorrow!</p>
-
-    <div class="card login-box">
-        <?php if ($error) echo "<p class='alert error'>" . htmlspecialchars($error) . "</p>"; ?>
-        <form method="post">
-            <?= csrf_field() ?>
-            <label for="u">Username:</label>
-            <input id="u" name="username" required autofocus>
-            <label for="p">Password:</label>
-            <input id="p" name="password" type="password" required>
-            <div class="actions">
-                <a class="btn" href="#about">About</a>
-                <button type="submit" class="btn">Log in</button>
-            </div>
-        </form>
+<body class="auth">
+<div class="split">
+    <?php include 'auth_left.php'; ?>
+    <div class="auth-right">
+        <div class="auth-form">
+            <h2>Please sign in</h2>
+            <p class="hint">Sign in to your classroom workspace.</p>
+            <?php if ($error) echo "<p class='alert error'>" . htmlspecialchars($error) . "</p>"; ?>
+            <?php if (isset($_GET['sent'])) echo "<p class='alert ok'>Request sent. Your administrator will give you a temporary password.</p>"; ?>
+            <form method="post" style="display:block">
+                <?= csrf_field() ?>
+                <label for="u">Username</label>
+                <input id="u" name="username" required autofocus autocomplete="username">
+                <label for="p">Password</label>
+                <div class="pw">
+                    <input id="p" name="password" type="password" required autocomplete="current-password">
+                    <button type="button" id="toggle" aria-label="Show password">Show</button>
+                </div>
+                <div class="forgot"><a href="forgot.php">Forgot password?</a></div>
+                <button type="submit" class="submit">Log in</button>
+            </form>
+            <hr>
+            <div class="help">Having trouble signing in?<b>Contact your administrator</b></div>
+        </div>
     </div>
-
-    <section id="about" class="card">
-        <h2>About Classroom Cleanliness</h2>
-        <p>Maintaining a clean and healthy school environment is everyone's responsibility. Our Cleanliness Monitoring System is designed to promote cleanliness, discipline, and environmental awareness by monitoring and evaluating the cleanliness of classrooms and school facilities. Through daily cleanliness ratings, proper waste management, and regular evaluations, we aim to encourage students and school personnel to take responsibility for keeping their surroundings clean and organized. Together, let's build a cleaner, healthier, and more comfortable learning environment for everyone. "Clean Surroundings, Healthy Minds, Brighter Futures!"</p>
-    </section>
-</main>
-<footer class="footer">Classroom Cleanliness</footer>
+</div>
+<script>
+document.getElementById('toggle').addEventListener('click', function () {
+    var p = document.getElementById('p');
+    var show = p.type === 'password';
+    p.type = show ? 'text' : 'password';
+    this.textContent = show ? 'Hide' : 'Show';
+});
+</script>
 </body>
 </html>

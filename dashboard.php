@@ -112,6 +112,10 @@ if (is_admin()) {
         ORDER BY 1")->fetchAll(PDO::FETCH_ASSOC);
 
     include 'header.php'; ?>
+    <?php if ($pendingReq): ?>
+        <p class="alert error"><?= $pendingReq ?> password reset request<?= $pendingReq > 1 ? 's' : '' ?> waiting. <a href="users.php">Review now &rarr;</a></p>
+    <?php endif; ?>
+
     <h2>Welcome, <?= htmlspecialchars($_SESSION['full_name']) ?></h2>
     <p class="sub">Overview for <?= date('l, F j, Y') ?></p>
 
@@ -296,6 +300,7 @@ if ($rate_pending)  $next = ['What to do next?', 'Rate the room', 'rate.php'];
 elseif ($open)      $next = ['What to do next?', 'Time Out', 'usage.php'];
 elseif ($notyet)    $next = ['What to do next?', 'Time In', 'usage.php'];
 
+$pendingReq = (int)$pdo->query("SELECT COUNT(*) FROM password_requests WHERE status = 'pending'")->fetchColumn();
 include 'header.php';
 ?>
 <h1 class="hello">Hello, <?= htmlspecialchars($_SESSION['full_name']) ?></h1>

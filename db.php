@@ -19,11 +19,17 @@ function require_login() {
         header('Location: login.php');
         exit;
     }
-    $stmt = $pdo->prepare("SELECT active FROM users WHERE user_id = ?");
+    $stmt = $pdo->prepare("SELECT active, must_change FROM users WHERE user_id = ?");
     $stmt->execute([$_SESSION['user_id']]);
-    if (!$stmt->fetchColumn()) {
+    $u = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$u || !$u['active']) {
         session_destroy();
         header('Location: login.php');
+        exit;
+    }
+    // Temporary password: nothing works until it is changed
+    if ($u['must_change'] && !in_array(basename($_SERVER['SCRIPT_NAME']), ['profile.php', 'logout.php'], true)) {
+        header('Location: profile.php');
         exit;
     }
 }
