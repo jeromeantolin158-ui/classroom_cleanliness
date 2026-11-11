@@ -30,8 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([password_hash($new, PASSWORD_DEFAULT), $_SESSION['user_id']]);
         session_regenerate_id(true);
         $ok = 'Password changed.';
-        header('Location: dashboard.php');
-        exit;
+        
     }
 }
 
@@ -42,7 +41,7 @@ $stmt = $pdo->prepare("
 $stmt->execute([$_SESSION['user_id']]);
 $me = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$stmt = $pdo->prepare("SELECT must_change FROM users WHERE user_id = ?");
+
 $stmt->execute([$_SESSION['user_id']]);
 $forced = (bool)$stmt->fetchColumn();
 
@@ -50,42 +49,62 @@ $title = 'Profile';
 $subtitle = 'Your account details and password.';
 include 'header.php';
 ?>
+<h1 class="s-h1">My profile</h1>
+<p class="s-sub">Your account details and security.</p>
 
-<?php if ($forced): ?>
-    <p class='alert error'>You are using a temporary password. Please choose your own to continue.</p>
-<?php endif; ?>
+<?php if ($message) echo "<p class='s-alert'>" . h($message) . "</p>"; ?>
+<?php if ($ok) echo "<p class='s-alert ok'>" . h($ok) . "</p>"; ?>
 
-<?php if ($message): ?>
-    <p class='alert error'><?= htmlspecialchars($message) ?></p>
-<?php endif; ?>
-
-<?php if ($ok): ?>
-    <p class='alert ok'><?= htmlspecialchars($ok) ?></p>
-<?php endif; ?>
-
-<div class="card login-box">
-    <h3 style="margin-top:0">Profile</h3>
-    <div class="table-wrap"><table>
-        <tr><th>Name</th><td><?= htmlspecialchars($me['full_name']) ?></td></tr>
-        <tr><th>Username</th><td><?= htmlspecialchars($me['username']) ?></td></tr>
-        <tr><th>Role</th><td><?= $me['role'] === 'admin' ? 'Administrator' : 'Section account' ?></td></tr>
-        <tr><th>Section</th><td><?= htmlspecialchars($me['section_name'] ?? '-') ?></td></tr>
-        <tr><th>Status</th><td><?= $me['active'] ? 'Active' : 'Deactivated' ?></td></tr>
-    </table></div>
+<div class="s-prof">
+    <div>
+        <section class="s-card">
+            <span class="s-pill go"><?= $me['role'] === 'admin' ? 'Administrator' : 'Class representative' ?></span>
+            <h2 style="margin:12px 0 2px"><?= h($me['full_name']) ?></h2>
+            <div class="s-muted"><?= h($me['section_name'] ?? '-') ?></div>
+            <p><span class="s-pill <?= $me['active'] ? 'go' : 'warn' ?>"><?= $me['active'] ? '● Active account' : 'Deactivated' ?></span></p>
+            <hr style="border:none;border-top:1px solid #e2ebe5;margin:14px 0">
+            <div class="s-k">Username</div><b><?= h($me['username']) ?></b>
+        </section>
+        <section class="s-card s-handoff">
+            <b>Need to update your details?</b>
+            <p class="s-muted">Your school manages your section and role. Contact your administrator if something doesn't look right.</p>
+        </section>
+    </div>
+    <div>
+        <section class="s-card">
+            <h3 class="s-ct">Personal information</h3>
+            <div class="s-info">
+                <div><small>Full name</small><b><?= h($me['full_name']) ?></b></div>
+                <div><small>Username</small><b><?= h($me['username']) ?></b></div>
+                <div><small>Section</small><b><?= h($me['section_name'] ?? '-') ?></b></div>
+                <div><small>Role</small><b><?= $me['role'] === 'admin' ? 'Administrator' : 'Class representative' ?></b></div>
+            </div>
+        </section>
+        <section class="s-card">
+            <h3 class="s-ct">Change password</h3>
+            <form method="post" autocomplete="off" style="display:block">
+                <?= csrf_field() ?>
+                <?php foreach ([['current', 'Current password', 'current-password'], ['new', 'New password', 'new-password'], ['confirm', 'Confirm new password', 'new-password']] as [$n, $l, $ac]): ?>
+                <div class="s-field">
+                    <label for="<?= $n ?>"><?= $l ?></label>
+                    <div class="s-pw">
+                        <input id="<?= $n ?>" name="<?= $n ?>" type="password" required autocomplete="<?= $ac ?>">
+                        <button type="button" class="show">Show</button>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                <div class="s-muted" style="margin-bottom:14px">Use at least 8 characters.</div>
+                <button type="submit" class="s-btn">Update password</button>
+            </form>
+        </section>
+    </div>
 </div>
-
-<div class="card login-box">
-    <h3 style="margin-top:0">Change password</h3>
-    <form method="post" autocomplete="off">
-        <?= csrf_field() ?>
-        <label for="c">Current password</label>
-        <input id="c" name="current" type="password" required autocomplete="current-password">
-        <label for="n">New password</label>
-        <input id="n" name="new" type="password" required minlength="8" autocomplete="new-password">
-        <label for="f">Confirm new password</label>
-        <input id="f" name="confirm" type="password" required minlength="8" autocomplete="new-password">
-        <button type="submit" class="btn">Change password</button>
-    </form>
-</div>
-
+<script>
+document.querySelectorAll('.s-pw .show').forEach(function (b) {
+    b.addEventListener('click', function () {
+        var i = b.parentNode.querySelector('input'), s = i.type === 'password';
+        i.type = s ? 'text' : 'password'; b.textContent = s ? 'Hide' : 'Show';
+    });
+});
+</script>
 <?php include 'footer.php'; ?>

@@ -5,14 +5,22 @@ require_login();
 close_stale_sessions($pdo);
 $title = 'Home';
 
-/* ---------- Admin: overview tables ---------- */
+/* ---------- Admin ---------- */
 if (is_admin()) {
-    $today = date('Y-m-d');
-    $dow   = (int)date('N');
-    $mon   = date('Y-m-d', strtotime('monday this week'));
-    $sun   = date('Y-m-d', strtotime('sunday this week'));
+    $title = 'Dashboard';
+    $today = date('Y-m-d'); $dow = (int)date('N'); $nowT = date('H:i:s');
 
-    // Today's classes
+    $week = $_GET['week'] ?? date('o-\WW');
+    if (!preg_match('/^(\d{4})-W(\d{2})$/', $week, $m) || (int)$m[2] < 1 || (int)$m[2] > 53) {
+        $week = date('o-\WW');
+        preg_match('/^(\d{4})-W(\d{2})$/', $week, $m);
+    }
+    $ws = new DateTime(); $ws->setISODate((int)$m[1], (int)$m[2], 1);
+    $we = clone $ws; $we->modify('+6 days');
+    $range = [$ws->format('Y-m-d'), $we->format('Y-m-d')];
+    $bFilter = $_GET['building'] ?? '';
+
+    // Room usage today
     $stmt = $pdo->prepare("
         SELECT sc.start_time, sc.end_time, r.room_number, r.building, s.section_name,
                u.usage_id, u.time_in, u.time_out, u.auto_closed
@@ -25,7 +33,44 @@ if (is_admin()) {
     $stmt->execute([$today, $dow, $today]);
     $todays = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // This week's averages per room and section
+    // Room status now
+    $stmt = $pdo->prepare("
+        SELECT rm.room_id, rm.room_number, rm.building,
+            (SELECT s.section_name FROM room_usage u
+               JOIN schedules sc ON sc.schedule_id = u.schedule_id
+               JOIN sections s ON s.section_id = sc.section_id
+              WHERE sc.room_id = rm.room_id AND u.usage_date = ?
+                AND u.time_in IS NOT NULL AND u.time_out IS NULL LIMIT 1) AS occupant,
+            (SELECT s.section_name FROM schedules sc
+               JOIN sections s ON s.section_id = sc.section_id
+              WHERE sc.room_id = rm.room_id AND sc.day_of_week = ?
+                AND ?::time BETWEEN sc.start_time AND sc.end_time
+                AND ?::date BETWEEN sc.valid_from AND sc.valid_to LIMIT 1) AS scheduled_now
+        FROM rooms rm ORDER BY rm.building NULLS LAST, rm.room_number");
+    $stmt->execute([$today, $dow, $nowT, $today]);
+    $roomStatus = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $total_rooms = count($roomStatus);
+    $occupied = count(array_filter($roomStatus, fn($r) => $r['occupant'] !== null));
+    $bList = array_values(array_unique(array_map(fn($r) => $r['building'] ?? '(No building)', $roomStatus)));
+    $shown = array_filter($roomStatus, fn($r) => $bFilter === '' || ($r['building'] ?? '(No building)') === $bFilter);
+
+    // Late classes
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM schedules sc
+        LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
+        WHERE sc.day_of_week = ? AND sc.start_time < ?::time AND sc.end_time > ?::time
+          AND ?::date BETWEEN sc.valid_from AND sc.valid_to AND u.usage_id IS NULL");
+    $stmt->execute([$today, $dow, $nowT, $nowT, $today]);
+    $late = (int)$stmt->fetchColumn();
+
+    // Sections per building
+    $buildings = $pdo->query("
+        SELECT COALESCE(rm.building, '(No building)') AS building,
+               COUNT(DISTINCT rm.room_id) AS rooms, COUNT(DISTINCT sc.section_id) AS sections
+        FROM rooms rm LEFT JOIN schedules sc ON sc.room_id = rm.room_id
+        GROUP BY COALESCE(rm.building, '(No building)') ORDER BY 1")->fetchAll(PDO::FETCH_ASSOC);
+
+    // Weekly report
     $stmt = $pdo->prepare("
         SELECT rm.room_id, rm.room_number, rm.building, s.section_name,
                ROUND(AVG(rt.score)::numeric, 2) AS avg_score, COUNT(*) AS n
@@ -37,209 +82,160 @@ if (is_admin()) {
         WHERE u.usage_date BETWEEN ? AND ?
         GROUP BY rm.room_id, rm.room_number, rm.building, s.section_id, s.section_name
         ORDER BY rm.room_number, avg_score ASC");
-    $stmt->execute([$mon, $sun]);
+    $stmt->execute($range);
     $avgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    // Keep only the lowest section per room (ties all kept)
     $min = [];
-    foreach ($avgs as $a) {
-        if (!isset($min[$a['room_id']]) || $a['avg_score'] < $min[$a['room_id']]) {
-            $min[$a['room_id']] = $a['avg_score'];
-        }
-    }
-    $lowest = array_filter($avgs, fn($a) => $a['avg_score'] == $min[$a['room_id']]);
+    foreach ($avgs as $a) { if (!isset($min[$a['room_id']]) || $a['avg_score'] < $min[$a['room_id']]) $min[$a['room_id']] = $a['avg_score']; }
+    $wN = array_sum(array_column($avgs, 'n'));
+    $wAvg = $wN ? round(array_sum(array_map(fn($a) => $a['avg_score'] * $a['n'], $avgs)) / $wN, 1) : null;
 
-    // Latest comments
-    $comments = $pdo->query("
-        SELECT u.usage_date, rm.room_number, s.section_name, rb.section_name AS rated_by,
-               rt.score, rt.comment
+    // Latest ratings with comments
+    $ratings = $pdo->query("
+        SELECT u.usage_date, rm.room_number, s.section_name, rb.section_name AS rated_by, rt.score, rt.comment
         FROM ratings rt
         JOIN room_usage u ON u.usage_id = rt.usage_id
         JOIN schedules sc ON sc.schedule_id = u.schedule_id
         JOIN rooms rm ON rm.room_id = sc.room_id
         JOIN sections s ON s.section_id = sc.section_id
         JOIN sections rb ON rb.section_id = rt.rated_by_section
-        WHERE rt.comment IS NOT NULL
-        ORDER BY rt.rated_at DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
-
-    $nowT = date('H:i:s');
-
-    // Room status right now
-    $stmt = $pdo->prepare("
-        SELECT rm.room_id, rm.room_number, rm.building,
-            (SELECT s.section_name FROM room_usage u
-               JOIN schedules sc ON sc.schedule_id = u.schedule_id
-               JOIN sections s ON s.section_id = sc.section_id
-              WHERE sc.room_id = rm.room_id AND u.usage_date = ?
-                AND u.time_in IS NOT NULL AND u.time_out IS NULL
-              LIMIT 1) AS occupant,
-            (SELECT s.section_name FROM schedules sc
-               JOIN sections s ON s.section_id = sc.section_id
-              WHERE sc.room_id = rm.room_id AND sc.day_of_week = ?
-                AND ?::time BETWEEN sc.start_time AND sc.end_time
-                AND ?::date BETWEEN sc.valid_from AND sc.valid_to
-              LIMIT 1) AS scheduled_now
-        FROM rooms rm
-        ORDER BY rm.building NULLS LAST, rm.room_number");
-    $stmt->execute([$today, $dow, $nowT, $today]);
-    $roomStatus = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $total_rooms = count($roomStatus);
-    $occupied = count(array_filter($roomStatus, fn($r) => $r['occupant'] !== null));
-
-    $bFilter = $_GET['building'] ?? '';
-    $bList = array_values(array_unique(array_map(fn($r) => $r['building'] ?? '(No building)', $roomStatus)));
-    $shown = array_filter($roomStatus, fn($r) => $bFilter === '' || ($r['building'] ?? '(No building)') === $bFilter);
-
-    // Classes that started today but have not timed in
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM schedules sc
-        LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
-        WHERE sc.day_of_week = ? AND sc.start_time < ?::time
-          AND sc.end_time > ?::time AND u.usage_id IS NULL
-          AND ?::date BETWEEN sc.valid_from AND sc.valid_to");
-    $stmt->execute([$today, $dow, $nowT, $nowT, $today]);
-    $late = (int)$stmt->fetchColumn();
-
-    // Sections and rooms per building
-    $buildings = $pdo->query("
-        SELECT COALESCE(rm.building, '(No building)') AS building,
-               COUNT(DISTINCT rm.room_id) AS rooms,
-               COUNT(DISTINCT sc.section_id) AS sections
-        FROM rooms rm
-        LEFT JOIN schedules sc ON sc.room_id = rm.room_id
-        GROUP BY COALESCE(rm.building, '(No building)')
-        ORDER BY 1")->fetchAll(PDO::FETCH_ASSOC);
+        ORDER BY rt.rated_at DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
 
     include 'header.php'; ?>
-    <?php if ($pendingReq): ?>
-        <p class="alert error"><?= $pendingReq ?> password reset request<?= $pendingReq > 1 ? 's' : '' ?> waiting. <a href="users.php">Review now &rarr;</a></p>
-    <?php endif; ?>
-
-    <h2>Welcome, <?= htmlspecialchars($_SESSION['full_name']) ?></h2>
-    <p class="sub">Overview for <?= date('l, F j, Y') ?></p>
-
-    <div class="stats">
-        <div class="stat"><b><?= $total_rooms ?></b><span>Total rooms</span></div>
-        <div class="stat"><b><?= $occupied ?></b><span>Occupied now</span></div>
-        <div class="stat"><b><?= $total_rooms - $occupied ?></b><span>Vacant</span></div>
-        <div class="stat <?= $late ? 'warn' : '' ?>"><b><?= $late ?></b><span>Late, not timed in</span></div>
+    <div class="s-head">
+        <div><h1 class="s-h1">Dashboard</h1><p class="s-sub">Room usage, ratings and the weekly report in one place.</p></div>
+        <span class="s-date"><?= date('D, F j, Y') ?></span>
     </div>
 
-    <h3>Room status</h3>
-    <form method="get">
-        <select name="building" onchange="this.form.submit()">
-            <option value="">All buildings</option>
-            <?php foreach ($bList as $b): ?>
-                <option value="<?= htmlspecialchars($b) ?>" <?= $bFilter === $b ? 'selected' : '' ?>><?= htmlspecialchars($b) ?></option>
+    <div class="s-kpis">
+        <div class="s-kpi"><small>Classrooms</small><b><?= $total_rooms ?></b><em><?= $occupied ?> occupied now</em></div>
+        <div class="s-kpi"><small>Classes today</small><b><?= count($todays) ?></b><em>Scheduled</em></div>
+        <div class="s-kpi"><small>Late, not timed in</small><b><?= $late ?></b><em>Already started</em></div>
+        <div class="s-kpi"><small>Weekly average</small><b><?= $wAvg !== null ? $wAvg . ' / 5' : '-' ?></b><em><?= (int)$wN ?> ratings</em></div>
+    </div>
+
+    <section class="s-card">
+        <h3 class="s-ct">Room usage today</h3>
+        <?php if (!$todays): ?><p class="s-muted">No classes scheduled today.</p><?php else: ?>
+        <div class="table-wrap"><table>
+            <tr><th>Time</th><th>Section</th><th>Room</th><th>Time in</th><th>Time out</th><th>Status</th></tr>
+            <?php foreach ($todays as $t): ?>
+            <tr>
+                <td><?= substr($t['start_time'], 0, 5) ?> - <?= substr($t['end_time'], 0, 5) ?></td>
+                <td><?= h($t['section_name']) ?></td>
+                <td><?= h($t['room_number'] . ' ' . ($t['building'] ?? '')) ?></td>
+                <td><?= $t['time_in'] ? substr($t['time_in'], 11, 5) : '-' ?></td>
+                <td><?= $t['time_out'] ? substr($t['time_out'], 11, 5) . ($t['auto_closed'] ? ' (auto)' : '') : '-' ?></td>
+                <td><?php if (!$t['usage_id']): ?><span class="s-pill">Not yet</span><?php elseif (!$t['time_out']): ?><span class="s-pill warn">In room</span><?php else: ?><span class="s-pill go">Done</span><?php endif; ?></td>
+            </tr>
             <?php endforeach; ?>
-        </select>
-    </form>
-    <?php if (!$roomStatus): ?>
-        <p class="empty">No rooms yet.</p>
-    <?php else: ?>
-    <div class="table-wrap"><table>
-        <tr><th>Room</th><th>Status</th><th>Section</th></tr>
-        <?php foreach ($roomStatus as $r): ?>
-        <?php
-            if ($r['occupant'] !== null)          { $st = 'Occupied'; $cls = 'busy'; $who = $r['occupant']; }
-            elseif ($r['scheduled_now'] !== null) { $st = 'Expected'; $cls = 'exp';  $who = $r['scheduled_now']; }
-            else                                  { $st = 'Vacant';   $cls = 'free'; $who = '-'; }
-        ?>
-        <tr>
-            <td><?= htmlspecialchars($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></td>
-            <td><span class="pill <?= $cls ?>"><?= $st ?></span></td>
-            <td><?= htmlspecialchars($who) ?></td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
-    <?php endif; ?>
+        </table></div>
+        <?php endif; ?>
+    </section>
 
-    <h3>Sections per building</h3>
-    <div class="table-wrap"><table>
-        <tr><th>Building</th><th>Rooms</th><th>Sections with classes</th></tr>
-        <?php foreach ($buildings as $b): ?>
-        <tr>
-            <td><?= htmlspecialchars($b['building']) ?></td>
-            <td><?= (int)$b['rooms'] ?></td>
-            <td><?= (int)$b['sections'] ?></td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
+    <div class="s-two" style="grid-template-columns:1.4fr 1fr;margin-bottom:18px">
+        <section class="s-card">
+            <h3 class="s-ct">Room status now
+                <form method="get" style="display:inline-flex">
+                    <input type="hidden" name="week" value="<?= h($week) ?>">
+                    <select name="building" onchange="this.form.submit()">
+                        <option value="">All buildings</option>
+                        <?php foreach ($bList as $b): ?><option value="<?= h($b) ?>" <?= $bFilter === $b ? 'selected' : '' ?>><?= h($b) ?></option><?php endforeach; ?>
+                    </select>
+                </form>
+            </h3>
+            <?php if (!$shown): ?><p class="s-muted">No rooms to show.</p><?php else: ?>
+            <div class="table-wrap"><table>
+                <tr><th>Room</th><th>Status</th><th>Section</th></tr>
+                <?php foreach ($shown as $r):
+                    if ($r['occupant'] !== null) { $st = 'Occupied'; $cls = 'busy'; $who = $r['occupant']; }
+                    elseif ($r['scheduled_now'] !== null) { $st = 'Expected'; $cls = 'exp'; $who = $r['scheduled_now']; }
+                    else { $st = 'Vacant'; $cls = 'free'; $who = '-'; } ?>
+                <tr><td><?= h($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></td><td><span class="pill <?= $cls ?>"><?= $st ?></span></td><td><?= h($who) ?></td></tr>
+                <?php endforeach; ?>
+            </table></div>
+            <?php endif; ?>
+        </section>
+        <section class="s-card">
+            <h3 class="s-ct">Sections per building</h3>
+            <div class="table-wrap"><table>
+                <tr><th>Building</th><th>Rooms</th><th>Sections</th></tr>
+                <?php foreach ($buildings as $b): ?>
+                <tr><td><?= h($b['building']) ?></td><td><?= (int)$b['rooms'] ?></td><td><?= (int)$b['sections'] ?></td></tr>
+                <?php endforeach; ?>
+            </table></div>
+        </section>
+    </div>
 
-    <h3>Today's classes</h3>
-    <?php if (!$todays): ?>
-        <p class="empty">No classes scheduled today.</p>
-    <?php else: ?>
-    <div class="table-wrap"><table>
-        <tr><th>Room</th><th>Section</th><th>Scheduled</th><th>Time In</th><th>Time Out</th><th>Status</th></tr>
-        <?php foreach ($todays as $t): ?>
-        <tr>
-            <td><?= htmlspecialchars($t['room_number'] . ' ' . ($t['building'] ?? '')) ?></td>
-            <td><?= htmlspecialchars($t['section_name']) ?></td>
-            <td><?= substr($t['start_time'], 0, 5) ?> - <?= substr($t['end_time'], 0, 5) ?></td>
-            <td><?= $t['time_in'] ? substr($t['time_in'], 11, 5) : '-' ?></td>
-            <td><?= $t['time_out'] ? substr($t['time_out'], 11, 5) . ($t['auto_closed'] ? ' (auto)' : '') : '-' ?></td>
-            <td><?= !$t['usage_id'] ? 'Not yet' : (!$t['time_out'] ? 'In room' : 'Done') ?></td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
-    <?php endif; ?>
+    <section class="s-card">
+        <h3 class="s-ct">Weekly report
+            <form method="get" style="display:inline-flex;gap:8px">
+                <input type="hidden" name="building" value="<?= h($bFilter) ?>">
+                <input type="week" name="week" value="<?= h($week) ?>">
+                <button type="submit" class="s-btn soft">Show</button>
+            </form>
+        </h3>
+        <p class="s-muted"><?= $ws->format('M j') ?> to <?= $we->format('M j, Y') ?> &middot; the lowest section in each room is highlighted</p>
+        <?php if (!$avgs): ?><p class="s-muted">No ratings for this week.</p><?php else: ?>
+        <div class="table-wrap"><table>
+            <tr><th>Room</th><th>Section</th><th>Average</th><th>Ratings</th><th></th></tr>
+            <?php foreach ($avgs as $a): $low = $a['avg_score'] == $min[$a['room_id']]; ?>
+            <tr class="<?= $low ? 'row-low' : '' ?>">
+                <td><?= h($a['room_number'] . ' ' . ($a['building'] ?? '')) ?></td>
+                <td><?= h($a['section_name']) ?></td>
+                <td><?= $a['avg_score'] ?> / 5</td>
+                <td><?= (int)$a['n'] ?><?= $a['n'] == 1 ? ' (only 1)' : '' ?></td>
+                <td><?= $low ? '<b>Lowest in room</b>' : '' ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table></div>
+        <?php endif; ?>
+    </section>
 
-    <h3>Lowest-rated this week</h3>
-    <?php if (!$lowest): ?>
-        <p class="empty">No ratings yet this week.</p>
-    <?php else: ?>
-    <div class="table-wrap"><table>
-        <tr><th>Room</th><th>Section</th><th>Average</th><th>Ratings</th></tr>
-        <?php foreach ($lowest as $l): ?>
-        <tr>
-            <td><?= htmlspecialchars($l['room_number'] . ' ' . ($l['building'] ?? '')) ?></td>
-            <td><?= htmlspecialchars($l['section_name']) ?></td>
-            <td><?= $l['avg_score'] ?> / 5</td>
-            <td><?= (int)$l['n'] ?><?= $l['n'] == 1 ? ' (only 1 rating)' : '' ?></td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
-    <?php endif; ?>
-    <p><a href="report.php">See the full weekly report &rarr;</a></p>
-
-    <h3>Latest comments</h3>
-    <?php if (!$comments): ?>
-        <p class="empty">No comments yet.</p>
-    <?php else: ?>
-    <div class="table-wrap"><table>
-        <tr><th>Date</th><th>Room</th><th>Class rated</th><th>Rated by</th><th>Score</th><th>Comment</th></tr>
-        <?php foreach ($comments as $c): ?>
-        <tr>
-            <td><?= htmlspecialchars($c['usage_date']) ?></td>
-            <td><?= htmlspecialchars($c['room_number']) ?></td>
-            <td><?= htmlspecialchars($c['section_name']) ?></td>
-            <td><?= htmlspecialchars($c['rated_by']) ?></td>
-            <td><?= (int)$c['score'] ?>/5</td>
-            <td class="comment-cell">
-            <?= htmlspecialchars($c['comment']) ?>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
-    <?php endif; ?>
+    <section class="s-card">
+        <h3 class="s-ct">Latest ratings</h3>
+        <?php if (!$ratings): ?><p class="s-muted">No ratings yet.</p><?php else: ?>
+        <div class="table-wrap"><table>
+            <tr><th>Date</th><th>Room</th><th>Section rated</th><th>Rated by</th><th>Score</th><th>Comment</th></tr>
+            <?php foreach ($ratings as $c): ?>
+            <tr>
+                <td><?= h($c['usage_date']) ?></td><td><?= h($c['room_number']) ?></td>
+                <td><?= h($c['section_name']) ?></td><td><?= h($c['rated_by']) ?></td>
+                <td><?= (int)$c['score'] ?>/5</td><td><?= h($c['comment'] ?? '') ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table></div>
+        <?php endif; ?>
+    </section>
     <?php include 'footer.php'; exit;
 }
 
 /* ---------- Section account ---------- */
-$stmt = $pdo->prepare("SELECT section_id FROM users WHERE user_id = ?");
+$title = 'Dashboard';
+$stmt = $pdo->prepare("SELECT s.section_id, s.section_name FROM users u LEFT JOIN sections s ON s.section_id = u.section_id WHERE u.user_id = ?");
 $stmt->execute([$_SESSION['user_id']]);
-$sid = (int)($stmt->fetchColumn() ?: 0);
+$me = $stmt->fetch(PDO::FETCH_ASSOC);
+$sid = (int)($me['section_id'] ?? 0);
 
-$today = date('Y-m-d');
-$dow   = (int)date('N');
-$mon   = date('Y-m-d', strtotime('monday this week'));
-$sun   = date('Y-m-d', strtotime('sunday this week'));
+$today = date('Y-m-d'); $dow = (int)date('N'); $nowT = date('H:i:s');
+$hr = (int)date('G');
+$greet = $hr < 12 ? 'Good morning' : ($hr < 18 ? 'Good afternoon' : 'Good evening');
+$mon = date('Y-m-d', strtotime('monday this week')); $sun = date('Y-m-d', strtotime('sunday this week'));
+$lmon = date('Y-m-d', strtotime('monday last week')); $lsun = date('Y-m-d', strtotime('sunday last week'));
 
-$classes = $comments = [];
-$result = ['avg' => null, 'n' => 0];
-$rate_pending = 0;
+$classes = []; $toRate = null; $pending = 0; $latest = null; $thisW = []; $lastW = [];
+
+$weekStats = function (string $from, string $to) use ($pdo) {
+    $stmt = $pdo->prepare("
+        SELECT sc.section_id, s.section_name, AVG(rt.score) AS a, COUNT(*) AS n
+        FROM ratings rt
+        JOIN room_usage u ON u.usage_id = rt.usage_id
+        JOIN schedules sc ON sc.schedule_id = u.schedule_id
+        JOIN sections s ON s.section_id = sc.section_id
+        WHERE u.usage_date BETWEEN ? AND ?
+        GROUP BY sc.section_id, s.section_name ORDER BY a DESC, n DESC");
+    $stmt->execute([$from, $to]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+};
 
 if ($sid) {
     $stmt = $pdo->prepare("
@@ -247,122 +243,158 @@ if ($sid) {
         FROM schedules sc
         JOIN rooms r ON r.room_id = sc.room_id
         LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
-        WHERE sc.day_of_week = ? AND sc.section_id = ?
-          AND ?::date BETWEEN sc.valid_from AND sc.valid_to
+        WHERE sc.day_of_week = ? AND sc.section_id = ? AND ?::date BETWEEN sc.valid_from AND sc.valid_to
         ORDER BY sc.start_time");
     $stmt->execute([$today, $dow, $sid, $today]);
     $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    $pending = rate_pending_count($pdo, $sid);
+
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM room_usage r2
+        SELECT rm.room_number, rm.building, s1.section_name AS prev_section, r2.time_in, sc2.start_time, sc2.end_time
+        FROM room_usage r2
         JOIN schedules sc2 ON sc2.schedule_id = r2.schedule_id
+        JOIN rooms rm ON rm.room_id = sc2.room_id
         JOIN LATERAL (
             SELECT pu.usage_id, pu.time_out, psc.section_id
             FROM room_usage pu JOIN schedules psc ON psc.schedule_id = pu.schedule_id
             WHERE psc.room_id = sc2.room_id AND pu.usage_date = r2.usage_date AND pu.time_in < r2.time_in
             ORDER BY pu.time_in DESC LIMIT 1) p ON TRUE
+        JOIN sections s1 ON s1.section_id = p.section_id
         LEFT JOIN ratings rt ON rt.usage_id = p.usage_id
         WHERE r2.usage_date = ? AND sc2.section_id = ?
           AND p.time_out IS NOT NULL AND p.section_id <> sc2.section_id
           AND p.time_out <= r2.time_in AND r2.time_in - p.time_out <= interval '2 hours'
-          AND rt.rating_id IS NULL");
+          AND rt.rating_id IS NULL
+        ORDER BY r2.time_in LIMIT 1");
     $stmt->execute([$today, $sid]);
-    $rate_pending = (int)$stmt->fetchColumn();
+    $toRate = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
     $stmt = $pdo->prepare("
-        SELECT u.usage_date, r.room_number, rt.score, rt.comment
+        SELECT u.usage_date, rm.room_number, rb.section_name AS rated_by, rt.score, rt.comment
         FROM ratings rt
         JOIN room_usage u ON u.usage_id = rt.usage_id
         JOIN schedules sc ON sc.schedule_id = u.schedule_id
-        JOIN rooms r ON r.room_id = sc.room_id
-        WHERE sc.section_id = ? AND rt.comment IS NOT NULL
-        ORDER BY rt.rated_at DESC LIMIT 3");
+        JOIN rooms rm ON rm.room_id = sc.room_id
+        JOIN sections rb ON rb.section_id = rt.rated_by_section
+        WHERE sc.section_id = ? ORDER BY rt.rated_at DESC LIMIT 1");
     $stmt->execute([$sid]);
-    $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $latest = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
-    $stmt = $pdo->prepare("
-        SELECT ROUND(AVG(rt.score)::numeric, 2) AS avg, COUNT(*) AS n
-        FROM ratings rt
-        JOIN room_usage u ON u.usage_id = rt.usage_id
-        JOIN schedules sc ON sc.schedule_id = u.schedule_id
-        WHERE sc.section_id = ? AND u.usage_date BETWEEN ? AND ?");
-    $stmt->execute([$sid, $mon, $sun]);
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $thisW = $weekStats($mon, $sun);
+    $lastW = $weekStats($lmon, $lsun);
 }
 
-$next = ['What to do next?', 'No more classes today', null];
-$open = $notyet = false;
+// Weekly numbers
+$myAvg = null; $rank = null; $delta = null;
+foreach ($thisW as $i => $w) { if ((int)$w['section_id'] === $sid) { $myAvg = (float)$w['a']; $rank = $i + 1; } }
+foreach ($lastW as $w) { if ((int)$w['section_id'] === $sid && $myAvg !== null) $delta = $myAvg - (float)$w['a']; }
+
+// Class status
+$open = $nextC = null; $doneCount = 0; $inprog = $upcoming = 0;
 foreach ($classes as $c) {
-    if ($c['usage_id'] && !$c['time_out']) $open = true;
-    if (!$c['usage_id']) $notyet = true;
+    if ($c['usage_id'] && !$c['time_out']) { $open = $open ?? $c; $inprog++; }
+    elseif ($c['usage_id']) { $doneCount++; }
+    else { if ($c['end_time'] > $nowT) $upcoming++; $nextC = $nextC ?? ($c['end_time'] > $nowT ? $c : null); }
 }
-if ($rate_pending)  $next = ['What to do next?', 'Rate the room', 'rate.php'];
-elseif ($open)      $next = ['What to do next?', 'Time Out', 'usage.php'];
-elseif ($notyet)    $next = ['What to do next?', 'Time In', 'usage.php'];
+$status = function ($c) use ($nowT) {
+    if ($c['usage_id']) return $c['time_out'] ? ['Done', 'go'] : ['In progress', 'go'];
+    return $c['end_time'] > $nowT ? ['Upcoming', ''] : ['Not logged', 'warn'];
+};
 
-$pendingReq = (int)$pdo->query("SELECT COUNT(*) FROM password_requests WHERE status = 'pending'")->fetchColumn();
+// Hero banner
+if ($toRate) {
+    $b = ['kick' => "You're timed in · Room " . $toRate['room_number'], 'head' => 'How did ' . $toRate['prev_section'] . ' leave the room?',
+          'sub' => 'You arrived at ' . substr($toRate['time_in'], 11, 5) . '. Rate the room, then enjoy your class.',
+          'foot' => substr($toRate['start_time'], 0, 5) . ' - ' . substr($toRate['end_time'], 0, 5), 'btn' => 'Rate room →', 'href' => 'rate.php'];
+} elseif ($open) {
+    $b = ['kick' => "You're timed in · Room " . $open['room_number'], 'head' => 'Your class is in progress',
+          'sub' => 'Remember to time out when you leave.', 'foot' => substr($open['start_time'], 0, 5) . ' - ' . substr($open['end_time'], 0, 5),
+          'btn' => 'Time out →', 'href' => 'usage.php'];
+} elseif ($nextC) {
+    $b = ['kick' => 'Up next · Today', 'head' => 'Your next class is in Room ' . $nextC['room_number'],
+          'sub' => 'Time in when you arrive.', 'foot' => substr($nextC['start_time'], 0, 5) . ' - ' . substr($nextC['end_time'], 0, 5),
+          'btn' => 'Room usage →', 'href' => 'usage.php'];
+} else {
+    $b = ['kick' => 'Today', 'head' => 'No more classes today', 'sub' => 'Nothing is waiting for you.', 'foot' => '', 'btn' => '', 'href' => ''];
+}
+
+// Handoff steps
+$s1 = $open || $toRate || $doneCount > 0;
+$s2 = $s1 && !$toRate;
+$s3 = $doneCount > 0 && !$open;
+$steps = [[$s1, 'Time in', 'Confirm your arrival'], [$s2, 'Rate the room', 'Review the previous section'], [$s3, 'Time out', 'When class ends']];
+$firstOpen = null; foreach ($steps as $i => $st) { if (!$st[0]) { $firstOpen = $i; break; } }
+
 include 'header.php';
 ?>
-<h1 class="hello">Hello, <?= htmlspecialchars($_SESSION['full_name']) ?></h1>
+<div class="s-head">
+    <div>
+        <h1 class="s-h1"><?= $greet ?>, <?= h($_SESSION['full_name']) ?></h1>
+        <p class="s-sub">Here's what's next for <?= h($me['section_name'] ?? 'your section') ?>.</p>
+    </div>
+    <span class="s-date"><?= date('D, F j, Y') ?></span>
+</div>
 
 <?php if (!$sid): ?>
-    <p class="empty">This account has no section yet. Ask your admin.</p>
+    <div class="s-card">This account has no section yet. Ask your administrator.</div>
 <?php else: ?>
 
-<?php if ($next[2]): ?>
-    <a class="next" href="<?= $next[2] ?>"><small><?= $next[0] ?></small><b><?= $next[1] ?></b></a>
-<?php else: ?>
-    <div class="next off"><small><?= $next[0] ?></small><b><?= $next[1] ?></b></div>
-<?php endif; ?>
+<section class="s-hero">
+    <div>
+        <span class="s-kick"><?= h($b['kick']) ?></span>
+        <h2><?= h($b['head']) ?></h2>
+        <p><?= h($b['sub']) ?></p>
+        <?php if ($b['foot']): ?><small><?= h($b['foot']) ?></small><?php endif; ?>
+    </div>
+    <?php if ($b['href']): ?><a class="s-btn lime" href="<?= h($b['href']) ?>"><?= h($b['btn']) ?></a><?php endif; ?>
+</section>
 
-<h3 class="section-title">Latest comment about your class</h3>
-<?php if (!$comments): ?>
-    <p class="empty">No comments yet.</p>
-<?php else: ?>
-<div class="table-wrap"><table>
-    <tr><th>Date</th><th>Room</th><th>Score</th><th>Comment</th></tr>
-    <?php foreach ($comments as $c): ?>
-    <tr>
-        <td><?= htmlspecialchars($c['usage_date']) ?></td>
-        <td><?= htmlspecialchars($c['room_number']) ?></td>
-        <td><?= (int)$c['score'] ?>/5</td>
-        <td class="comment-cell">
-        <?= htmlspecialchars($c['comment']) ?>
-        </td>
-    </tr>
-    <?php endforeach; ?>
-</table></div>
-<?php endif; ?>
+<div class="s-kpis">
+    <div class="s-kpi"><small>Section rating</small><b><?= $myAvg !== null ? round($myAvg, 1) . ' / 5' : '-' ?></b>
+        <em><?= $delta !== null ? ($delta >= 0 ? '↑ ' : '↓ ') . abs(round($delta, 1)) . ' from last week' : 'This week' ?></em></div>
+    <div class="s-kpi"><small>Campus ranking</small><b><?= $rank ? '#' . $rank . ' of ' . count($thisW) : '-' ?></b><em>Based on this week's ratings</em></div>
+    <div class="s-kpi"><small>Today's classes</small><b><?= count($classes) ?> <?= count($classes) === 1 ? 'class' : 'classes' ?></b><em><?= $inprog ?> in progress · <?= $upcoming ?> upcoming</em></div>
+    <div class="s-kpi"><small>Ratings to give</small><b><?= $pending ? $pending . ' pending' : 'None' ?></b><em><?= $toRate ? 'Room ' . h($toRate['room_number']) . ' · ' . h($toRate['prev_section']) : 'All caught up' ?></em></div>
+</div>
 
-<h3 class="section-title" id="classes">Today's classes</h3>
-<?php if (!$classes): ?>
-    <p class="empty">No classes today.</p>
-<?php else: ?>
-<div class="table-wrap"><table>
-    <tr><th>Room</th><th>Time</th><th>Status</th></tr>
-    <?php foreach ($classes as $c): ?>
-    <tr>
-        <td><?= htmlspecialchars($c['room_number'] . ' ' . ($c['building'] ?? '')) ?></td>
-        <td><?= substr($c['start_time'], 0, 5) ?> - <?= substr($c['end_time'], 0, 5) ?></td>
-        <td><?= !$c['usage_id'] ? 'Not yet' : (!$c['time_out'] ? 'In since ' . substr($c['time_in'], 11, 5) : 'Done') ?></td>
-    </tr>
-    <?php endforeach; ?>
-</table></div>
-<?php endif; ?>
+<div class="s-two">
+    <section class="s-card">
+        <h3 class="s-ct">Today's schedule <a href="usage.php">View room usage →</a></h3>
+        <?php if (!$classes): ?><p class="s-muted">No classes today.</p><?php endif; ?>
+        <?php foreach ($classes as $c): [$lbl, $cls] = $status($c); ?>
+        <div class="s-row">
+            <span><?= substr($c['start_time'], 0, 5) ?> - <?= substr($c['end_time'], 0, 5) ?></span>
+            <span><b>Room <?= h($c['room_number']) ?></b><small><?= h($c['building'] ?? '') ?></small></span>
+            <span class="s-pill <?= $cls ?>"><?= $lbl ?></span>
+        </div>
+        <?php endforeach; ?>
+    </section>
 
-<h3 class="section-title" id="results">This week's result</h3>
-<?php if (!$result['n']): ?>
-    <p class="empty">No ratings yet this week.</p>
-<?php else: ?>
-<div class="table-wrap"><table>
-    <tr><th>Average</th><th>Ratings</th><th>Note</th></tr>
-    <tr>
-        <td><?= $result['avg'] ?> / 5</td>
-        <td><?= (int)$result['n'] ?></td>
-        <td><?= $result['n'] == 1 ? 'Only 1 rating' : '5 = spotless, 1 = very dirty' ?></td>
-    </tr>
-</table></div>
-<?php endif; ?>
+    <section class="s-card">
+        <h3 class="s-ct">Latest rating for your section</h3>
+        <?php if (!$latest): ?>
+            <p class="s-muted">No ratings yet.</p>
+        <?php else: ?>
+            <div class="s-muted">From <?= h($latest['rated_by']) ?> · <?= h($latest['usage_date']) ?>, Room <?= h($latest['room_number']) ?></div>
+            <div class="s-stars"><?= str_repeat('★', (int)$latest['score']) . str_repeat('☆', 5 - (int)$latest['score']) ?></div>
+            <?php if ($latest['comment']): ?><p class="s-quote">“<?= h($latest['comment']) ?>”</p><?php endif; ?>
+        <?php endif; ?>
+    </section>
+</div>
+
+<div class="s-two" style="grid-template-columns:1fr">
+    <section class="s-card s-handoff">
+        <h3 class="s-ct">Your room handoff</h3>
+        <div class="s-steps">
+            <?php foreach ($steps as $i => [$done, $name, $hint]): ?>
+            <div><b><?= sprintf('%02d', $i + 1) ?> <?= $name ?><?= $done ? ' ✓' : '' ?></b>
+                <small><?= $done ? 'Done' : ($i === $firstOpen ? 'Your next step' : $hint) ?></small></div>
+            <?php endforeach; ?>
+        </div>
+    </section>
+
+</div>
 
 <?php endif; ?>
 <?php include 'footer.php'; ?>

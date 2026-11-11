@@ -27,9 +27,9 @@ function require_login() {
         header('Location: login.php');
         exit;
     }
-    // Temporary password: nothing works until it is changed
-    if ($u['must_change'] && !in_array(basename($_SERVER['SCRIPT_NAME']), ['profile.php', 'logout.php'], true)) {
-        header('Location: profile.php');
+     // Temporary password: show only the locked popup until it is changed
+    if ($u['must_change']) {
+        include __DIR__ . '/force_password.php';
         exit;
     }
 }
@@ -64,4 +64,23 @@ function close_stale_sessions(PDO $pdo): void {
           AND (u.usage_date + sc.end_time) < ?::timestamp
     ");
     $stmt->execute([date('Y-m-d H:i:s')]);
+}
+function h($s): string { return htmlspecialchars((string)$s); }
+
+function rate_pending_count(PDO $pdo, int $sid): int {
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM room_usage r2
+        JOIN schedules sc2 ON sc2.schedule_id = r2.schedule_id
+        JOIN LATERAL (
+            SELECT pu.usage_id, pu.time_out, psc.section_id
+            FROM room_usage pu JOIN schedules psc ON psc.schedule_id = pu.schedule_id
+            WHERE psc.room_id = sc2.room_id AND pu.usage_date = r2.usage_date AND pu.time_in < r2.time_in
+            ORDER BY pu.time_in DESC LIMIT 1) p ON TRUE
+        LEFT JOIN ratings rt ON rt.usage_id = p.usage_id
+        WHERE r2.usage_date = ? AND sc2.section_id = ?
+          AND p.time_out IS NOT NULL AND p.section_id <> sc2.section_id
+          AND p.time_out <= r2.time_in AND r2.time_in - p.time_out <= interval '2 hours'
+          AND rt.rating_id IS NULL");
+    $stmt->execute([date('Y-m-d'), $sid]);
+    return (int)$stmt->fetchColumn();
 }

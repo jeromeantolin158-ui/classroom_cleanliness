@@ -2,6 +2,7 @@
 <?php
 require 'db.php';
 require_login();
+if (is_admin()) { header('Location: dashboard.php'); exit; }
 close_stale_sessions($pdo);
 
 $message = '';
@@ -33,6 +34,7 @@ function rateable(
     $sql = "
         SELECT
             r2.usage_id AS my_usage,
+            r2.time_in AS my_time_in,
             sc2.section_id AS my_section_id,
             s2.section_name AS my_section,
             rm.room_number,
@@ -198,126 +200,129 @@ $rows = (!is_admin() && $my_section === null)
 
 ?>
 
-<?php $title = 'rate'; include 'header.php'; ?>
+<?php
+$title = 'Rating';
+$recent = null;
+if ($my_section) {
+    $stmt = $pdo->prepare("
+        SELECT u.usage_date, rm.room_number, s.section_name, rt.score
+        FROM ratings rt
+        JOIN room_usage u ON u.usage_id = rt.usage_id
+        JOIN schedules sc ON sc.schedule_id = u.schedule_id
+        JOIN rooms rm ON rm.room_id = sc.room_id
+        JOIN sections s ON s.section_id = sc.section_id
+        WHERE rt.rated_by_section = ? ORDER BY rt.rated_at DESC LIMIT 1");
+    $stmt->execute([$my_section]);
+    $recent = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+include 'header.php';
+?>
 
-    
-    <h2>Rate Room Cleanliness - <?= date('l, F j, Y') ?></h2>
-
-    <p>Rate how clean the previous class left the room.</p>
-
-    <?php if ($message): ?>
-
-        <p style="color:red">
-            <?= htmlspecialchars($message) ?>
-        </p>
-
+<?php if (is_admin()): ?>
+    <h2>Ratings today - <?= date('l, F j, Y') ?></h2>
+    <?php if ($message) echo "<p class='alert error'>" . h($message) . "</p>"; ?>
+    <?php if (!$rows): ?><p class="empty">Nothing to rate yet.</p><?php else: ?>
+    <div class="table-wrap"><table>
+        <tr><th>Room</th><th>Rater</th><th>Rated section</th><th>Left at</th><th>Score</th></tr>
+        <?php foreach ($rows as $r): ?>
+        <tr>
+            <td><?= h($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></td>
+            <td><?= h($r['my_section']) ?></td><td><?= h($r['prev_section']) ?></td>
+            <td><?= h(substr($r['time_out'], 11, 5)) ?><?= $r['auto_closed'] ? ' (auto)' : '' ?></td>
+            <td><?= $r['score'] !== null ? (int)$r['score'] . '/5' : 'Not rated' ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
     <?php endif; ?>
 
+<?php else: ?>
+<h1 class="s-h1">Rate the room</h1>
+<p class="s-sub">Give fair feedback on how the previous section left your shared space.</p>
+<?php if ($message) echo "<p class='s-alert'>" . h($message) . "</p>"; ?>
 
-    <?php if (!$rows): ?>
+<?php if (!$rows): ?>
+    <div class="s-card">Nothing to rate yet. Time in after another section has left the room, and it will appear here.</div>
+<?php endif; ?>
 
-        <p>
-            Nothing to rate yet. A class must time in after another
-            class has finished in the same room.
-        </p>
-
-    <?php else: ?>
-
-        <div class="table-wrap">
-
-            <tr>
-                <th>Room</th>
-                <th>You (rater)</th>
-                <th>Previous class</th>
-                <th>Left at</th>
-                <th>Rating</th>
-            </tr>
-
-            <?php foreach ($rows as $r): ?>
-
-                <tr>
-
-                    <td>
-                        <?= htmlspecialchars(
-                            $r['room_number'] . ' ' . ($r['building'] ?? '')
-                        ) ?>
-                    </td>
-
-                    <td>
-                        <?= htmlspecialchars($r['my_section']) ?>
-                    </td>
-
-                    <td>
-                        <?= htmlspecialchars($r['prev_section']) ?>
-                    </td>
-
-                    <td>
-                        <?= htmlspecialchars(substr($r['time_out'], 11, 5)) ?>
-
-                        <?= $r['auto_closed'] ? ' (auto)' : '' ?>
-                    </td>
-
-                    <td>
-
-                        <?php if ($r['score'] !== null): ?>
-
-                            Rated <?= (int)$r['score'] ?>/5
-
-                        <?php elseif (!$can_rate): ?>
-
-                            View only
-
-                        <?php else: ?>
-
-                            <form method="post">
-
-                                <?= csrf_field() ?>
-
-                                <input
-                                    type="hidden"
-                                    name="my_usage"
-                                    value="<?= (int)$r['my_usage'] ?>"
-                                >
-
-                                <input
-                                    type="hidden"
-                                    name="prev_usage"
-                                    value="<?= (int)$r['prev_usage'] ?>"
-                                >
-
-                                <select name="score" required>
-
-                                    <option value="">Score</option>
-                                    <option value="5">5 - Spotless</option>
-                                    <option value="4">4 - Clean</option>
-                                    <option value="3">3 - Okay</option>
-                                    <option value="2">2 - Dirty</option>
-                                    <option value="1">1 - Very dirty</option>
-
-                                </select>
-
-                                <input
-                                    name="comment"
-                                    placeholder="Comment (optional)"
-                                    maxlength="500"
-                                >
-
-                                <button type="submit">
-                                    Submit
-                                </button>
-
-                            </form>
-
-                        <?php endif; ?>
-
-                    </td>
-
-                </tr>
-
-            <?php endforeach; ?>
-
+<?php foreach ($rows as $r): $k = (int)$r['my_usage']; ?>
+<?php if ($r['score'] === null && $can_rate): ?>
+<p class="s-alert ok">✓ Timed in at <?= h(substr($r['my_time_in'], 11, 5)) ?>. You can now rate Room <?= h($r['room_number']) ?>.</p>
+<?php endif; ?>
+<div class="s-ratewrap">
+    <section class="s-card" style="margin:0">
+        <h2 style="margin:0">Room <?= h($r['room_number']) ?></h2>
+        <p class="s-muted">You're rating <?= h($r['prev_section']) ?>, not your own section.</p>
+        <?php if ($r['score'] !== null): ?>
+            <div class="s-stars"><?= str_repeat('★', (int)$r['score']) . str_repeat('☆', 5 - (int)$r['score']) ?></div>
+            <p>Rated <?= (int)$r['score'] ?>/5. Thank you!</p>
+        <?php elseif (!$can_rate): ?>
+            <p>View only.</p>
+        <?php else: ?>
+        <form method="post" class="s-rform">
+            <?= csrf_field() ?>
+            <input type="hidden" name="my_usage" value="<?= $k ?>">
+            <input type="hidden" name="prev_usage" value="<?= (int)$r['prev_usage'] ?>">
+            <h3 style="margin:14px 0 0;font-size:1rem;text-transform:none;letter-spacing:0">How was the room when you arrived?</h3>
+            <div class="s-muted">Choose 1 to 5 stars.</div>
+            <div class="s-starpick">
+                <?php for ($v = 1; $v <= 5; $v++): ?>
+                    <input type="radio" name="score" id="s<?= $k ?>_<?= $v ?>" value="<?= $v ?>" required>
+                    <label for="s<?= $k ?>_<?= $v ?>" data-v="<?= $v ?>">★</label>
+                <?php endfor; ?>
+                <span class="s-starlabel"></span>
+            </div>
+            <div class="s-cnt"><span>1 · Very dirty</span><span>5 · Spotless</span></div>
+            <label style="font-weight:700;font-size:.85rem">Comment <span class="s-muted" style="font-weight:400">Optional</span></label>
+            <textarea name="comment" maxlength="500" placeholder="Be specific, respectful, and focused on the room."></textarea>
+            <div class="s-cnt"><span>Be specific, respectful, and focused on the room.</span><span class="cnt">0 / 500</span></div>
+            <div class="s-btns">
+                <button type="submit" class="s-btn">Submit rating →</button>
+                <a class="s-btn soft" href="usage.php">Back to room usage</a>
+            </div>
+        </form>
+        <?php endif; ?>
+    </section>
+    <aside>
+        <div class="s-sidecard">
+            <h3>The room before your class</h3>
+            <div class="s-k">Previous section</div>
+            <b><?= h($r['prev_section']) ?></b>
+            <div class="s-muted">Left at <?= h(substr($r['time_out'], 11, 5)) ?><?= $r['auto_closed'] ? ' (auto)' : '' ?> · Room <?= h($r['room_number']) ?></div>
+            <hr style="border:none;border-top:1px solid #e2ebe5;margin:14px 0">
+            <div class="s-k">Your section</div>
+            <b><?= h($r['my_section']) ?></b>
+            <div class="s-muted">Timed in <?= h(substr($r['my_time_in'], 11, 5)) ?></div>
         </div>
+        <div class="s-sidecard tip">
+            <h3>A little feedback goes a long way.</h3>
+            Look at the room as you found it:
+            <ul><li>Clean floors and desks</li><li>Properly arranged chairs</li><li>Clean board and empty bins</li></ul>
+        </div>
+    </aside>
+</div>
+<?php endforeach; ?>
 
-    <?php endif; ?>
+<?php if ($recent): ?>
+<section class="s-card" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <b>Your recent feedback</b>
+    <span class="s-muted"><?= h($recent['usage_date']) ?> · Room <?= h($recent['room_number']) ?> · <?= h($recent['section_name']) ?> · <?= (int)$recent['score'] ?> / 5</span>
+</section>
+<?php endif; ?>
 
+<script>
+var names = ['', 'Very dirty', 'Dirty', 'Okay', 'Good', 'Spotless'];
+document.querySelectorAll('.s-rform').forEach(function (f) {
+    var labels = f.querySelectorAll('.s-starpick label'), out = f.querySelector('.s-starlabel');
+    f.querySelectorAll('.s-starpick input').forEach(function (i) {
+        i.addEventListener('change', function () {
+            var v = +i.value;
+            labels.forEach(function (l) { l.classList.toggle('on', +l.dataset.v <= v); });
+            out.textContent = v + ' out of 5 · ' + names[v];
+        });
+    });
+    var t = f.querySelector('textarea'), c = f.querySelector('.cnt');
+    t.addEventListener('input', function () { c.textContent = t.value.length + ' / 500'; });
+});
+</script>
+<?php endif; ?>
 <?php include 'footer.php'; ?>

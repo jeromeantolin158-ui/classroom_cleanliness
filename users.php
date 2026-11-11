@@ -59,25 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$uid]);
                 $ok = 'Account updated.';
             }
-        } elseif ($action === 'resetreq') {
-            $stmt = $pdo->prepare("SELECT r.request_id, u.user_id, u.username FROM password_requests r JOIN users u ON u.user_id = r.user_id WHERE r.request_id = ? AND r.status = 'pending'");
-            $stmt->execute([(int)($_POST['request_id'] ?? 0)]);
-            $req = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($req) {
-                $temp = bin2hex(random_bytes(5));
-                $pdo->beginTransaction();
-                $pdo->prepare("UPDATE users SET password_hash = ?, must_change = TRUE WHERE user_id = ?")
-                    ->execute([password_hash($temp, PASSWORD_DEFAULT), $req['user_id']]);
-                $pdo->prepare("UPDATE password_requests SET status = 'done', handled_by = ?, handled_at = NOW() WHERE request_id = ?")
-                    ->execute([$_SESSION['user_id'], $req['request_id']]);
-                $pdo->commit();
-                $ok = 'Temporary password for ' . $req['username'] . ': ' . $temp . '  (shown once. Give it to the user privately.)';
-            }
-        } elseif ($action === 'dismiss') {
-            $pdo->prepare("UPDATE password_requests SET status = 'dismissed', handled_by = ?, handled_at = NOW() WHERE request_id = ? AND status = 'pending'")
-                ->execute([$_SESSION['user_id'], (int)($_POST['request_id'] ?? 0)]);
-            $ok = 'Request dismissed.';
-        }
+        
+        } 
     } catch (PDOException $e) {
         // Note: '23505' is for PostgreSQL. If using MySQL, use $e->errorInfo[1] === 1062
         if ($e->getCode() === '23505') {
@@ -106,31 +89,7 @@ include 'header.php';
     <?php if ($ok) echo "<p class='alert ok'>" . htmlspecialchars($ok) . "</p>"; ?>
 
     <?php if ($pending): ?>
-    <h3>Password reset requests</h3>
-    <div class="table-wrap"><table>
-        <tr><th>Username</th><th>Name</th><th>Requested</th><th>Action</th></tr>
-        <?php foreach ($pending as $p): ?>
-        <tr>
-            <td><?= htmlspecialchars($p['username']) ?></td>
-            <td><?= htmlspecialchars($p['full_name']) ?></td>
-            <td><?= htmlspecialchars(substr($p['requested_at'], 0, 16)) ?></td>
-            <td>
-                <form method="post" style="display:inline" onsubmit="return confirm('Reset this password?');">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="resetreq">
-                    <input type="hidden" name="request_id" value="<?= (int)$p['request_id'] ?>">
-                    <button type="submit">Reset</button>
-                </form>
-                <form method="post" style="display:inline">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="dismiss">
-                    <input type="hidden" name="request_id" value="<?= (int)$p['request_id'] ?>">
-                    <button type="submit">Dismiss</button>
-                </form>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
+    
     <?php endif; ?>
 
     <h3>Add account</h3>

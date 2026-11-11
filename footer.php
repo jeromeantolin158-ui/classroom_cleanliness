@@ -1,4 +1,5 @@
-    </main>
+<?php include is_admin() ? 'footer_admin.php' : 'footer_student.php'; return; ?>
+ </main>
 </div>
 
 <nav class="bottomnav">

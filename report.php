@@ -1,6 +1,7 @@
 <?php
 require 'db.php';
 require_login();
+if (is_admin()) { header('Location: dashboard.php'); exit; }
 
 // Who is viewing? Admin sees all, section accounts see only their own class.
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE user_id = ?");

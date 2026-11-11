@@ -1,4 +1,5 @@
 <?php
+include is_admin() ? 'header_admin.php' : 'header_student.php'; return;
 $admin = is_admin();
 $cur = basename($_SERVER['SCRIPT_NAME']);
 
@@ -23,6 +24,7 @@ $logout_svg = '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= htmlspecialchars($title ?? 'Classroom Cleanliness') ?></title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="student.css">
 </head>
 <body class="app <?= $admin ? 'admin' : 'student' ?>">
 
