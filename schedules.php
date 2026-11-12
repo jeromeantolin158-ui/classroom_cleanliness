@@ -2,6 +2,7 @@
 <?php
 require 'db.php';
 require_login();
+if (!is_admin()) { http_response_code(403); exit('Admins only.'); }
 
 $is_admin = is_admin();
 $message = '';
@@ -32,30 +33,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $start = $_POST['start_time'] ?? '';
     $end = $_POST['end_time'] ?? '';
 
-    // Validity dates
-    $vfrom = $_POST['valid_from'] ?? '';
-    $vto = ($_POST['valid_to'] ?? '') === ''
-        ? '9999-12-31'
-        : $_POST['valid_to'];
+    $subject = trim($_POST['subject'] ?? '');
 
     try {
         if ($action === 'add' || $action === 'update') {
 
-            if (!$room_id || !$section_id || !isset($days[$day]) || $start === '' || $end === '') {
-                $message = 'Please fill in every field.';
+            if ($subject === '' || !$room_id || !$section_id || !isset($days[$day]) || $start === '' || $end === '') {
+                $message = 'All fields are required.';
+            } elseif (mb_strlen($subject) > 100) {
+                $message = 'Subject is too long (max 100 characters).';
 
             } elseif ($end <= $start) {
                 $message = 'End time must be later than start time.';
 
-            } elseif ($vfrom === '' || $vto < $vfrom) {
-                $message = 'The end date must not be before the start date.';
 
             } elseif ($action === 'add') {
 
                 $stmt = $pdo->prepare("
                     INSERT INTO schedules
-                    (room_id, section_id, day_of_week, start_time, end_time, valid_from, valid_to)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (room_id, section_id, day_of_week, start_time, end_time, subject, valid_from, valid_to)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE, '9999-12-31')
                 ");
 
                 $stmt->execute([
@@ -64,8 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $day,
                     $start,
                     $end,
-                    $vfrom,
-                    $vto
+                    $subject
                 ]);
 
                 header('Location: schedules.php');
@@ -80,8 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         day_of_week = ?,
                         start_time = ?,
                         end_time = ?,
-                        valid_from = ?,
-                        valid_to = ?
+                        subject = ?
                     WHERE schedule_id = ?
                 ");
 
@@ -91,8 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $day,
                     $start,
                     $end,
-                    $vfrom,
-                    $vto,
+                    $subject,
                     (int)$_POST['schedule_id']
                 ]);
 
@@ -170,193 +164,107 @@ $sections = $pdo->query("
     ORDER BY section_name
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Get schedules, including validity dates
-$schedules = $pdo->query("
-    SELECT sc.schedule_id,
-           sc.day_of_week,
-           sc.start_time,
-           sc.end_time,
-           sc.valid_from,
-           sc.valid_to,
-           r.room_number,
-           r.building,
-           s.section_name
+// Get schedules, including validity dates + today's status
+$today = date('Y-m-d'); $dow = (int)date('N'); $nowT = date('H:i:s');
+$stmt = $pdo->prepare("
+    SELECT sc.schedule_id, sc.day_of_week, sc.start_time, sc.end_time, sc.valid_from, sc.valid_to, sc.subject,
+           r.room_number, r.building, s.section_name, u.usage_id, u.time_out
     FROM schedules sc
     JOIN rooms r ON r.room_id = sc.room_id
     JOIN sections s ON s.section_id = sc.section_id
-    ORDER BY sc.day_of_week, sc.start_time, r.room_number
-")->fetchAll(PDO::FETCH_ASSOC);
+    LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
+    ORDER BY sc.day_of_week, sc.start_time, r.room_number");
+$stmt->execute([$today]);
+$schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-?>
-
-<?php $title = 'Schedules'; include 'header.php'; ?>
-
-<h2>Manage Schedules</h2>
-
-<?php if ($message): ?>
-    <p class="alert error">
-        <?= htmlspecialchars($message) ?>
-    </p>
-<?php endif; ?>
-
-<?php if ($is_admin): ?>
-
-<form method="post">
-
-    <?= csrf_field() ?>
-
-    <input type="hidden" name="action"
-           value="<?= $edit ? 'update' : 'add' ?>">
-
-    <?php if ($edit): ?>
-        <input type="hidden" name="schedule_id"
-               value="<?= $edit['schedule_id'] ?>">
-    <?php endif; ?>
-
-    <select name="section_id" required>
-        <option value="">-- Section --</option>
-
-        <?php foreach ($sections as $s): ?>
-            <option value="<?= $s['section_id'] ?>"
-                <?= ($edit['section_id'] ?? 0) == $s['section_id'] ? 'selected' : '' ?>>
-                <?= htmlspecialchars($s['section_name']) ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-
-    <select name="room_id" required>
-        <option value="">-- Room --</option>
-
-        <?php foreach ($rooms as $r): ?>
-            <option value="<?= $r['room_id'] ?>"
-                <?= ($edit['room_id'] ?? 0) == $r['room_id'] ? 'selected' : '' ?>>
-                <?= htmlspecialchars($r['room_number'] . ' ' . ($r['building'] ?? '')) ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-
-    <select name="day_of_week" required>
-        <option value="">-- Day --</option>
-
-        <?php foreach ($days as $n => $label): ?>
-            <option value="<?= $n ?>"
-                <?= ($edit['day_of_week'] ?? 0) == $n ? 'selected' : '' ?>>
-                <?= $label ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-
-    Start
-    <input type="time" name="start_time" required
-           value="<?= $edit ? substr($edit['start_time'], 0, 5) : '' ?>">
-
-    End
-    <input type="time" name="end_time" required
-         value="<?= $edit ? substr($edit['end_time'], 0, 5) : '' ?>">
-
-    From
-    <input type="date" name="valid_from" required
-           value="<?= htmlspecialchars($edit['valid_from'] ?? date('Y-m-d')) ?>">
-
-    Until
-    <input type="date" name="valid_to"
-           value="<?= ($edit && $edit['valid_to'] !== '9999-12-31') ? htmlspecialchars($edit['valid_to']) : '' ?>">
-
-    <button type="submit">
-        <?= $edit ? 'Save Changes' : 'Add Schedule' ?>
-    </button>
-
-    <?php if ($edit): ?>
-        <a href="schedules.php">Cancel</a>
-    <?php endif; ?>
-
-</form>
-
-<?php else: ?>
-
-    <p><i>View only. Only admins can change schedules.</i></p>
-
-<?php endif; ?>
-
-<br>
-
-<div class="table-wrap">
-
-    <table>
-
-        <tr>
-            <th>Day</th>
-            <th>Time</th>
-            <th>Dates</th>
-            <th>Section</th>
-            <th>Room</th>
-
-            <?php if ($is_admin) echo '<th>Actions</th>'; ?>
-        </tr>
-
-        <?php foreach ($schedules as $sc): ?>
-
-        <tr>
-
-            <td>
-                <?= $days[$sc['day_of_week']] ?>
-            </td>
-
-            <td>
-                <?= substr($sc['start_time'], 0, 5) ?>
-                -
-                <?= substr($sc['end_time'], 0, 5) ?>
-            </td>
-
-            <td>
-                <?= htmlspecialchars($sc['valid_from']) ?>
-                to
-                <?= $sc['valid_to'] === '9999-12-31'
-                    ? 'no end'
-                    : htmlspecialchars($sc['valid_to']) ?>
-            </td>
-
-            <td>
-                <?= htmlspecialchars($sc['section_name']) ?>
-            </td>
-
-            <td>
-                <?= htmlspecialchars($sc['room_number'] . ' ' . ($sc['building'] ?? '')) ?>
-            </td>
-
-            <?php if ($is_admin): ?>
-
-            <td>
-
-                <a href="schedules.php?edit=<?= $sc['schedule_id'] ?>">
-                    Edit
-                </a>
-
-                <form method="post"
-                      style="display:inline"
-                      onsubmit="return confirm('Delete this schedule?');">
-
-                    <?= csrf_field() ?>
-
-                    <input type="hidden" name="action" value="delete">
-
-                    <input type="hidden" name="schedule_id"
-                           value="<?= $sc['schedule_id'] ?>">
-
-                    <button type="submit">Delete</button>
-
-                </form>
-
-            </td>
-
-            <?php endif; ?>
-
-        </tr>
-
-        <?php endforeach; ?>
-
-    </table>
-
+$title = 'Schedule'; include 'header.php'; ?>
+<div class="a-head">
+    <div><h1 class="s-h1">Schedule</h1><p class="s-sub">Organize classes and prevent room conflicts.</p></div>
+    <span class="s-date"><?= date('D, F j, Y') ?></span>
 </div>
 
+<?php if ($message) echo "<p class='s-alert'>" . h($message) . "</p>"; ?>
+
+<div class="a-bar">
+    <input type="search" data-search placeholder="Search schedules...">
+    <select data-filter>
+        <option value="">All days</option>
+        <?php foreach ($days as $n => $label): ?><option><?= $label ?></option><?php endforeach; ?>
+    </select>
+    <button type="button" class="s-btn" data-open="formModal">+ Add schedule</button>
+</div>
+
+<section class="a-card">
+    <h3 id="a-count"><?= count($schedules) ?> classes</h3>
+    <p class="s-muted">Status is shown for today's classes only.</p>
+    <div class="table-wrap"><table class="a-table" data-paged="10" data-noun="classes">
+        <thead><tr><th>Day</th><th>Time</th><th>Subject</th><th>Section</th><th>Room</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+        <?php foreach ($schedules as $sc):
+            $st = '-'; $c = 'mute';
+            $live = (int)$sc['day_of_week'] === $dow && $today >= $sc['valid_from'] && $today <= $sc['valid_to'];
+            if ($live) {
+                if ($sc['usage_id'] && $sc['time_out']) { $st = 'Done'; $c = 'go'; }
+                elseif ($sc['usage_id']) { $st = 'In use'; $c = 'go'; }
+                elseif ($nowT > $sc['start_time']) { $st = 'Not timed in'; $c = 'warn'; }
+                else { $st = 'Upcoming'; $c = 'mute'; }
+            }
+            $room = $sc['room_number'] . ' ' . ($sc['building'] ?? ''); ?>
+        <tr class="r" data-q="<?= h(strtolower($days[$sc['day_of_week']] . ' ' . ($sc['subject'] ?? '') . ' ' . $sc['section_name'] . ' ' . $room)) ?>" data-f="<?= h($days[$sc['day_of_week']]) ?>">
+            <td class="nm"><?= $days[$sc['day_of_week']] ?></td>
+            <td><?= substr($sc['start_time'], 0, 5) ?> - <?= substr($sc['end_time'], 0, 5) ?></td>
+            <td><?= h($sc['subject'] ?? '—') ?></td>
+            <td><?= h($sc['section_name']) ?></td>
+            <td><?= h($room) ?></td>
+            <td><span class="a-st <?= $c ?>"><?= $st ?></span></td>
+            <td>
+                <a class="a-btn" href="schedules.php?edit=<?= (int)$sc['schedule_id'] ?>">Edit</a>
+                <form method="post" data-confirm data-title="Delete schedule" data-heading="Delete <?= h(($sc['subject'] ?? '') !== '' && $sc['subject'] !== null ? $sc['subject'] : $sc['section_name'] . ' on ' . $days[$sc['day_of_week']]) ?>?" data-text="This record will be removed. A schedule that already has usage records can't be deleted.">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="schedule_id" value="<?= (int)$sc['schedule_id'] ?>">
+                    <button type="submit" class="a-btn del">Delete</button>
+                </form>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+        <tr class="none" hidden><td colspan="7">No classes match.</td></tr>
+        </tbody>
+    </table></div>
+    <div class="a-pager"><span id="a-showing"></span><div><button type="button" id="a-prev">Previous</button><button type="button" id="a-next">Next</button></div></div>
+</section>
+
+<section class="s-note"><b>Keep room assignments conflict-free</b><small>Choose a room and time that do not overlap another class.</small></section>
+
+<?php $fv = $edit ?? ($message && $action === 'add' ? ['subject' => $subject, 'section_id' => $section_id, 'room_id' => $room_id, 'day_of_week' => $day, 'start_time' => $start, 'end_time' => $end] : []);
+      $openForm = $edit || ($message && $action === 'add'); ?>
+<dialog id="formModal" class="a-modal fig" <?= $openForm ? 'data-autoopen' : '' ?>>
+    <form method="post">
+        <?= csrf_field() ?>
+        <h3><?= $edit ? 'Edit schedule' : 'Add schedule' ?></h3>
+        <p class="a-sub"><?= $edit ? 'Update the selected record below.' : 'Create a new campus record.' ?></p>
+        <input type="hidden" name="action" value="<?= $edit ? 'update' : 'add' ?>">
+        <?php if ($edit): ?><input type="hidden" name="schedule_id" value="<?= (int)$edit['schedule_id'] ?>"><?php endif; ?>
+        <label>Subject</label><input name="subject" placeholder="Enter subject" maxlength="100" required value="<?= h($fv['subject'] ?? '') ?>">
+        <label>Section</label>
+        <select name="section_id" required><option value="">Enter section</option>
+        <?php foreach ($sections as $sx): ?><option value="<?= $sx['section_id'] ?>" <?= ($fv['section_id'] ?? 0) == $sx['section_id'] ? 'selected' : '' ?>><?= h($sx['section_name']) ?></option><?php endforeach; ?>
+        </select>
+        <label>Room</label>
+        <select name="room_id" required><option value="">Enter room</option>
+        <?php foreach ($rooms as $r): ?><option value="<?= $r['room_id'] ?>" <?= ($fv['room_id'] ?? 0) == $r['room_id'] ? 'selected' : '' ?>>Room <?= h($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></option><?php endforeach; ?>
+        </select>
+        <label>Day</label>
+        <select name="day_of_week" required><option value="">Enter day</option>
+        <?php foreach ($days as $n => $label): ?><option value="<?= $n ?>" <?= ($fv['day_of_week'] ?? 0) == $n ? 'selected' : '' ?>><?= $label ?></option><?php endforeach; ?>
+        </select>
+        <label>Time</label>
+        <div class="a-two">
+            <input type="time" name="start_time" required value="<?= !empty($fv['start_time']) ? h(substr($fv['start_time'], 0, 5)) : '' ?>">
+            <input type="time" name="end_time" required value="<?= !empty($fv['end_time']) ? h(substr($fv['end_time'], 0, 5)) : '' ?>">
+        </div>
+        <p class="a-req">All fields are required.</p>
+        <div class="a-acts"><button type="button" class="s-btn soft" data-close>Cancel</button><button type="submit" class="s-btn"><?= $edit ? 'Save changes' : 'Add schedule' ?></button></div>
+    </form>
+</dialog>
 <?php include 'footer.php'; ?>

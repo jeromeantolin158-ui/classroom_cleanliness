@@ -1,5 +1,5 @@
 <?php
-$cur = basename($_SERVER['SCRIPT_NAME']);
+$cur = $nav_cur ?? basename($_SERVER['SCRIPT_NAME']);
 $pend_ = [];
 try {
     $pend_ = $pdo->query("SELECT r.request_id, r.requested_at, u.username, u.full_name FROM password_requests r JOIN users u ON u.user_id = r.user_id WHERE r.status = 'pending' ORDER BY r.requested_at")->fetchAll(PDO::FETCH_ASSOC);
@@ -13,12 +13,13 @@ $ic = [
   'users' => '<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5M17 4.5a3.5 3.5 0 0 1 0 7M22 20c0-2.5-1.5-4-4-4.8"/>',
   'acc'   => '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
   'out'   => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  'help'  => '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>',
   'bell'  => '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/>',
 ];
 function s_icon(string $p): string { return '<svg class="s-ic" viewBox="0 0 24 24">' . $p . '</svg>'; }
 
 $nav_main = [['dashboard.php', 'Dashboard', $ic['dash']]];
-$nav_manage = [['rooms.php', 'Rooms', $ic['room']], ['sections.php', 'Sections', $ic['sec']], ['schedules.php', 'Schedules', $ic['sch']], ['users.php', 'Users', $ic['users']]];
+$nav_manage = [['rooms.php', 'Rooms', $ic['room']], ['sections.php', 'Sections', $ic['sec']], ['schedules.php', 'Schedule', $ic['sch']], ['users.php', 'Users', $ic['users']]];
 $nav_all = array_merge($nav_main, $nav_manage, [['profile.php', 'Account', $ic['acc']]]);
 $ic_out = $ic['out'];
 ?>
@@ -30,24 +31,19 @@ $ic_out = $ic['out'];
 <title><?= h($title ?? 'Classroom Cleaning') ?></title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="student.css">
+<link rel="stylesheet" href="admin.css">
 </head>
 <body class="stu adm">
 <aside class="s-side">
     <div class="s-brand"><b>CICI</b><small>Classroom Cleaning</small></div>
     <div class="s-label">Admin workspace</div>
     <nav class="s-nav">
-        <?php foreach ($nav_main as [$f, $l, $p]): ?>
-            <a href="<?= $f ?>" class="<?= $cur === $f ? 'on' : '' ?>"><span class="s-l"><?= s_icon($p) ?><?= $l ?></span></a>
-        <?php endforeach; ?>
-    </nav>
-    <div class="s-label">Manage</div>
-    <nav class="s-nav">
-        <?php foreach ($nav_manage as [$f, $l, $p]): ?>
+        <?php foreach (array_merge($nav_main, $nav_manage) as [$f, $l, $p]): ?>
             <a href="<?= $f ?>" class="<?= $cur === $f ? 'on' : '' ?>"><span class="s-l"><?= s_icon($p) ?><?= $l ?></span></a>
         <?php endforeach; ?>
     </nav>
     <div class="s-foot">
-        <a href="profile.php" class="<?= $cur === 'profile.php' ? 'on' : '' ?>"><span class="s-l"><?= s_icon($ic['acc']) ?>Account</span></a>
+        <a href="help.php" class="<?= $cur === 'help.php' ? 'on' : '' ?>"><span class="s-l"><?= s_icon($ic['help']) ?>Help &amp; guidelines</span></a>
         <form method="post" action="logout.php"><?= csrf_field() ?><button type="submit"><span class="s-l"><?= s_icon($ic['out']) ?>Sign out</span></button></form>
     </div>
 </aside>
@@ -70,7 +66,7 @@ $ic_out = $ic['out'];
                     </div>
                 </div>
             </div>
-            <a class="s-user" href="profile.php"><b><?= h($_SESSION['full_name'] ?? '') ?></b><small>Administrator</small></a>
+            <a class="s-user" href="profile.php"><b><?= h($_SESSION['full_name'] ?? '') ?></b><small>Administrator access</small></a>
         </div>
     </header>
     <main class="container s-content">
