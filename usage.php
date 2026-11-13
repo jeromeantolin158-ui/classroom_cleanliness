@@ -1,19 +1,12 @@
 <?php
-require 'db.php';
-require_login();
-if (is_admin()) { header('Location: dashboard.php'); exit; }
+require 'lib.php';
+$my_section = require_student();
 close_stale_sessions($pdo);
 $message = '';
 
-$stmt = $pdo->prepare("SELECT section_id FROM users WHERE user_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$my_section = $stmt->fetchColumn();
-$my_section = ($my_section === false || $my_section === null) ? null : (int)$my_section;
-$can_act = !is_admin() && $my_section !== null;
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    if (!$can_act) { http_response_code(403); exit('Only a section account can log usage.'); }
+    if ($my_section === null) { http_response_code(403); exit('Only a section account can log usage.'); }
 
     $action = $_POST['action'] ?? '';
     $today = date('Y-m-d');
@@ -63,40 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $today = date('Y-m-d'); $dow = (int)date('N');
 
-/* ---------- Admin: plain table ---------- */
-if (is_admin()) {
-    $stmt = $pdo->prepare("
-        SELECT sc.start_time, sc.end_time, s.section_name, r.room_number, r.building, u.time_in, u.time_out, u.auto_closed
-        FROM schedules sc
-        JOIN sections s ON s.section_id = sc.section_id
-        JOIN rooms r ON r.room_id = sc.room_id
-        LEFT JOIN room_usage u ON u.schedule_id = sc.schedule_id AND u.usage_date = ?
-        WHERE sc.day_of_week = ? AND ?::date BETWEEN sc.valid_from AND sc.valid_to
-        ORDER BY r.room_number, sc.start_time");
-    $stmt->execute([$today, $dow, $today]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $title = 'Room Usage';
-    include 'header.php';
-    ?>
-    <h2>Room Usage - <?= date('l, F j, Y') ?></h2>
-    <?php if (!$rows): ?><p class="empty">No classes to show today.</p><?php else: ?>
-    <div class="table-wrap"><table>
-        <tr><th>Room</th><th>Section</th><th>Scheduled</th><th>Time In</th><th>Time Out</th></tr>
-        <?php foreach ($rows as $r): ?>
-        <tr>
-            <td><?= h($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></td>
-            <td><?= h($r['section_name']) ?></td>
-            <td><?= substr($r['start_time'], 0, 5) ?> - <?= substr($r['end_time'], 0, 5) ?></td>
-            <td><?= $r['time_in'] ? substr($r['time_in'], 11, 5) : '-' ?></td>
-            <td><?= $r['time_out'] ? substr($r['time_out'], 11, 5) . ($r['auto_closed'] ? ' (auto)' : '') : '-' ?></td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
-    <?php endif; ?>
-    <?php include 'footer.php'; exit;
-}
-
-/* ---------- Section account ---------- */
 $title = 'Room usage';
 $view = ($_GET['view'] ?? 'today') === 'week' ? 'week' : 'today';
 

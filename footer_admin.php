@@ -1,11 +1,11 @@
     </main>
 </div>
 <nav class="s-tabs">
-    <?php foreach ($nav_all as [$f, $l, $p]): ?>
-        <a href="<?= $f ?>" class="<?= $cur === $f ? 'on' : '' ?>"><?= s_icon($p) ?><span><?= $l ?></span></a>
+    <?php foreach (array_merge($nav, [['profile.php', 'Account', 'acc']]) as [$f, $l, $i]): ?>
+        <a href="<?= $f ?>" class="<?= $cur === $f ? 'on' : '' ?>"><?= icon($i) ?><span><?= $l ?></span></a>
     <?php endforeach; ?>
-    <form method="post" action="logout.php"><?= csrf_field() ?><button type="submit"><?= s_icon($ic_out) ?><span>Sign out</span></button></form>
+    <form method="post" action="logout.php"><?= csrf_field() ?><button type="submit"><?= icon('out') ?><span>Sign out</span></button></form>
 </nav>
-<script src="admin.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

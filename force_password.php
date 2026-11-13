@@ -74,13 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
     <form method="post" action="logout.php" class="out"><?= csrf_field() ?><button type="submit">Sign out</button></form>
 </div>
-<script>
-document.querySelectorAll('.show').forEach(function (b) {
-    b.addEventListener('click', function () {
-        var i = b.parentNode.querySelector('input'), s = i.type === 'password';
-        i.type = s ? 'text' : 'password'; b.textContent = s ? 'Hide' : 'Show';
-    });
-});
-</script>
+<script src="app.js"></script>
 </body>
 </html>

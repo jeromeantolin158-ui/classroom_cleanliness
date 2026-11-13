@@ -1,10 +1,8 @@
 
 <?php
-require 'db.php';
-require_login();
-if (!is_admin()) { http_response_code(403); exit('Admins only.'); }
+require 'lib.php';
+require_admin();
 
-$is_admin = is_admin();
 $message = '';
 $action = '';
 
@@ -21,10 +19,6 @@ $days = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    if (!$is_admin) {
-        http_response_code(403);
-        exit('Admins only.');
-    }
 
     $action = $_POST['action'] ?? '';
     $room_id = (int)($_POST['room_id'] ?? 0);
@@ -140,7 +134,7 @@ $edit_id = (int)($_GET['edit'] ?? (
     $action === 'update' ? ($_POST['schedule_id'] ?? 0) : 0
 ));
 
-if ($is_admin && $edit_id > 0) {
+if ($edit_id > 0) {
     $stmt = $pdo->prepare("
         SELECT *
         FROM schedules

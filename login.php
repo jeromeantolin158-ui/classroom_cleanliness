@@ -39,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in</title>
-<link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="login.css">
 </head>
 <body class="auth">
@@ -58,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label for="p">Password</label>
                 <div class="pw">
                     <input id="p" name="password" type="password" required autocomplete="current-password">
-                    <button type="button" id="toggle" aria-label="Show password">Show</button>
+                    <button type="button" id="toggle" class="show" aria-label="Show password">Show</button>
                 </div>
                 <div class="forgot"><a href="forgot.php">Forgot password?</a></div>
                 <button type="submit" class="submit">Log in</button>
@@ -68,13 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 </div>
-<script>
-document.getElementById('toggle').addEventListener('click', function () {
-    var p = document.getElementById('p');
-    var show = p.type === 'password';
-    p.type = show ? 'text' : 'password';
-    this.textContent = show ? 'Hide' : 'Show';
-});
-</script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -1,3 +1,1 @@
-<?php
-include is_admin() ? 'header_admin.php' : 'header_student.php';
-return;
+<?php include is_admin() ? 'header_admin.php' : 'header_student.php';

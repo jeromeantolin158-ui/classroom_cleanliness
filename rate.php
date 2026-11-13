@@ -1,26 +1,11 @@
 
 <?php
-require 'db.php';
-require_login();
-if (is_admin()) { header('Location: dashboard.php'); exit; }
+require 'lib.php';
+$my_section = require_student();
 close_stale_sessions($pdo);
 
 $message = '';
 $today = date('Y-m-d');
-
-// Get the logged-in user's section
-$stmt = $pdo->prepare("SELECT section_id FROM users WHERE user_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-
-$my_section = $stmt->fetchColumn();
-
-$my_section = $my_section === false || $my_section === null
-    ? null
-    : (int)$my_section;
-
-// Only non-admin accounts with a section can rate
-$can_rate = !is_admin() && $my_section !== null;
-
 
 // Finds sessions that timed in today,
 // plus the class that used the same room right before them.
@@ -118,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
     // Prevent admins and accounts without sections from rating
-    if (!$can_rate) {
+    if ($my_section === null) {
         http_response_code(403);
         exit('Only a section account can rate.');
     }
@@ -193,8 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
 // Get rateable sessions
-// Admins see everything; section accounts see their own section.
-$rows = (!is_admin() && $my_section === null)
+$rows = $my_section === null
     ? []
     : rateable($pdo, $today, null, $my_section);
 
@@ -218,24 +202,6 @@ if ($my_section) {
 include 'header.php';
 ?>
 
-<?php if (is_admin()): ?>
-    <h2>Ratings today - <?= date('l, F j, Y') ?></h2>
-    <?php if ($message) echo "<p class='alert error'>" . h($message) . "</p>"; ?>
-    <?php if (!$rows): ?><p class="empty">Nothing to rate yet.</p><?php else: ?>
-    <div class="table-wrap"><table>
-        <tr><th>Room</th><th>Rater</th><th>Rated section</th><th>Left at</th><th>Score</th></tr>
-        <?php foreach ($rows as $r): ?>
-        <tr>
-            <td><?= h($r['room_number'] . ' ' . ($r['building'] ?? '')) ?></td>
-            <td><?= h($r['my_section']) ?></td><td><?= h($r['prev_section']) ?></td>
-            <td><?= h(substr($r['time_out'], 11, 5)) ?><?= $r['auto_closed'] ? ' (auto)' : '' ?></td>
-            <td><?= $r['score'] !== null ? (int)$r['score'] . '/5' : 'Not rated' ?></td>
-        </tr>
-        <?php endforeach; ?>
-    </table></div>
-    <?php endif; ?>
-
-<?php else: ?>
 <h1 class="s-h1">Rate the room</h1>
 <p class="s-sub">Give fair feedback on how the previous section left your shared space.</p>
 <?php if ($message) echo "<p class='s-alert'>" . h($message) . "</p>"; ?>
@@ -245,7 +211,7 @@ include 'header.php';
 <?php endif; ?>
 
 <?php foreach ($rows as $r): $k = (int)$r['my_usage']; ?>
-<?php if ($r['score'] === null && $can_rate): ?>
+<?php if ($r['score'] === null): ?>
 <p class="s-alert ok">✓ Timed in at <?= h(substr($r['my_time_in'], 11, 5)) ?>. You can now rate Room <?= h($r['room_number']) ?>.</p>
 <?php endif; ?>
 <div class="s-ratewrap">
@@ -255,8 +221,6 @@ include 'header.php';
         <?php if ($r['score'] !== null): ?>
             <div class="s-stars"><?= str_repeat('★', (int)$r['score']) . str_repeat('☆', 5 - (int)$r['score']) ?></div>
             <p>Rated <?= (int)$r['score'] ?>/5. Thank you!</p>
-        <?php elseif (!$can_rate): ?>
-            <p>View only.</p>
         <?php else: ?>
         <form method="post" class="s-rform">
             <?= csrf_field() ?>
@@ -309,20 +273,4 @@ include 'header.php';
 </section>
 <?php endif; ?>
 
-<script>
-var names = ['', 'Very dirty', 'Dirty', 'Okay', 'Good', 'Spotless'];
-document.querySelectorAll('.s-rform').forEach(function (f) {
-    var labels = f.querySelectorAll('.s-starpick label'), out = f.querySelector('.s-starlabel');
-    f.querySelectorAll('.s-starpick input').forEach(function (i) {
-        i.addEventListener('change', function () {
-            var v = +i.value;
-            labels.forEach(function (l) { l.classList.toggle('on', +l.dataset.v <= v); });
-            out.textContent = v + ' out of 5 · ' + names[v];
-        });
-    });
-    var t = f.querySelector('textarea'), c = f.querySelector('.cnt');
-    t.addEventListener('input', function () { c.textContent = t.value.length + ' / 500'; });
-});
-</script>
-<?php endif; ?>
 <?php include 'footer.php'; ?>

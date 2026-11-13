@@ -99,12 +99,4 @@ include 'header.php';
         </section>
     </div>
 </div>
-<script>
-document.querySelectorAll('.s-pw .show').forEach(function (b) {
-    b.addEventListener('click', function () {
-        var i = b.parentNode.querySelector('input'), s = i.type === 'password';
-        i.type = s ? 'text' : 'password'; b.textContent = s ? 'Hide' : 'Show';
-    });
-});
-</script>
 <?php include 'footer.php'; ?>

@@ -1,16 +1,9 @@
 <?php
-require 'db.php';
-require_login();
-if (!is_admin()) { http_response_code(403); exit('Admins only.'); }
+require 'lib.php';
+require_admin();
 close_stale_sessions($pdo);
 
-$week = $_GET['week'] ?? date('o-\WW');
-if (!preg_match('/^(\d{4})-W(\d{2})$/', $week, $m) || (int)$m[2] < 1 || (int)$m[2] > 53) {
-    $week = date('o-\WW');
-    preg_match('/^(\d{4})-W(\d{2})$/', $week, $m);
-}
-$ws = new DateTime(); $ws->setISODate((int)$m[1], (int)$m[2], 1);
-$we = clone $ws; $we->modify('+6 days');
+[$week, $ws, $we] = week_bounds($_GET['week'] ?? null);
 $pws = clone $ws; $pws->modify('-7 days'); $pwe = clone $pws; $pwe->modify('+6 days');
 $bFilter = $_GET['building'] ?? '';
 $today = date('Y-m-d'); $nowT = date('H:i:s');

@@ -1,17 +1,11 @@
 <?php
-require 'db.php';
-require_login();
-if (!is_admin()) { http_response_code(403); exit('Admins only.'); }
-$is_admin = is_admin();
+require 'lib.php';
+require_admin();
 $message = '';
 $action = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    if (!$is_admin) {
-        http_response_code(403);
-        exit('Admins only.');
-    }
 
     $action = $_POST['action'] ?? '';
     $room_number = trim($_POST['room_number'] ?? '');
@@ -98,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Which room is being edited?
 $edit_room = null;
 $edit_id = (int)($_GET['edit'] ?? ($action === 'update' ? $_POST['room_id'] : 0));
-if ($is_admin && $edit_id > 0) {
+if ($edit_id > 0) {
     $stmt = $pdo->prepare("SELECT * FROM rooms WHERE room_id = ?");
     $stmt->execute([$edit_id]);
     $edit_room = $stmt->fetch(PDO::FETCH_ASSOC);

@@ -1,17 +1,11 @@
 <?php
-require 'db.php';
-require_login();
-if (!is_admin()) { http_response_code(403); exit('Admins only.'); }
-$is_admin = is_admin();
+require 'lib.php';
+require_admin();
 $message = '';
 $action = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    if (!$is_admin) {
-        http_response_code(403);
-        exit('Admins only.');
-    }
 
     $action = $_POST['action'] ?? '';
     $section_name = mb_strtoupper(trim($_POST['section_name'] ?? ''));
@@ -53,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $edit_section = null;
 $edit_id = (int)($_GET['edit'] ?? ($action === 'update' ? $_POST['section_id'] : 0));
-if ($is_admin && $edit_id > 0) {
+if ($edit_id > 0) {
     $stmt = $pdo->prepare("SELECT * FROM sections WHERE section_id = ?");
     $stmt->execute([$edit_id]);
     $edit_section = $stmt->fetch(PDO::FETCH_ASSOC);
