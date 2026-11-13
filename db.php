@@ -6,10 +6,13 @@ session_set_cookie_params([
     'samesite' => 'Lax',
 ]);
 session_start();
+$cfg = __DIR__ . '/db.local.php';
+if (!is_file($cfg)) { http_response_code(500); exit('Missing db.local.php (copy db.example.php).'); }
+$c = require $cfg;
 $pdo = new PDO(
-    "pgsql:host=localhost;port=5432;dbname=classroom_cleanliness",
-    "postgres",
-    "jeromelumbao@09",
+    "pgsql:host={$c['host']};port={$c['port']};dbname={$c['name']}",
+    $c['user'],
+    $c['pass'],
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
 );
 
