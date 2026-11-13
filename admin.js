@@ -48,16 +48,6 @@
     function sync() { if (r.disabled) return; s.disabled = r.value === 'admin'; if (s.disabled) s.value = ''; s.required = r.value === 'user'; }
     r.addEventListener('change', sync); sync();
   });
-  document.querySelectorAll('[data-times]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var d = document.getElementById('timesModal');
-      d.querySelector('[name=schedule_id]').value = b.dataset.sid;
-      d.querySelector('[name=time_in]').value = b.dataset.in;
-      d.querySelector('[name=time_out]').value = b.dataset.out;
-      d.querySelector('#timesWho').textContent = b.dataset.room;
-      d.showModal();
-    });
-  });
   document.querySelectorAll('[data-reset]').forEach(function (b) {
     b.addEventListener('click', function () {
       var d = document.getElementById('resetModal');

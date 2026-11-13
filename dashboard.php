@@ -1,10 +1,8 @@
 <?php
-ini_set('display_errors', 1); error_reporting(E_ALL);
+
 require 'db.php';
 require_login();
 close_stale_sessions($pdo);
-$title = 'Home';
-
 /* ---------- Admin ---------- */
 if (is_admin()) {
     $title = 'Dashboard';

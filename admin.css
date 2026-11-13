@@ -149,3 +149,7 @@ body.adm .a-table.tight .a-btn{margin-left:4px;padding:0 10px}
 .sc-ok{color:#16834a;font-weight:700}
 .sc-low{color:#b42318;font-weight:700}
 @media(max-width:899px){.w-grid{grid-template-columns:1fr}.w-chart{gap:8px}}
+
+/* Group related fields in the combined room editor without changing the modal theme. */
+.a-modal.fig .a-form-section{margin:20px 0 2px;padding-top:14px;border-top:1px solid #e2ebe5;color:#17492f;font-size:.88rem;font-weight:800}
+.a-modal.fig .a-form-section:first-of-type{margin-top:8px;padding-top:0;border-top:0}
