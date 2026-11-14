@@ -715,3 +715,13 @@ body.adm .a-table.tight .a-btn{margin-left:4px;padding:0 10px}
 /* Group related fields in the combined room editor without changing the modal theme. */
 .a-modal.fig .a-form-section{margin:20px 0 2px;padding-top:14px;border-top:1px solid #e2ebe5;color:#17492f;font-size:.88rem;font-weight:800}
 .a-modal.fig .a-form-section:first-of-type{margin-top:8px;padding-top:0;border-top:0}
+body.adm .a-bar form{margin-left:auto}
+body.adm .a-bar form .s-btn, body.adm .a-bar form + .s-btn{margin-left:0}
+.rk-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:14px}
+.rk-title{font-size:.66rem;letter-spacing:.8px;text-transform:uppercase;color:#64756a;font-weight:700;margin-bottom:6px}
+.rk-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #e2ebe5}
+.rk-row div{flex:1}.rk-row b{display:block}.rk-row small{color:#64756a}
+.rk-n{width:26px;height:26px;border-radius:50%;background:#e8f3ea;color:#17492f;font-size:.75rem;font-weight:700;display:grid;place-items:center}
+.rk-row em{font-style:normal;font-weight:700;font-size:1.05rem}
+.rk-good{color:#16834a}.rk-bad{color:#b45309}
+@media (max-width:700px){.rk-grid{grid-template-columns:1fr;gap:18px}}

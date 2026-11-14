@@ -3,6 +3,7 @@ require 'lib.php';
 require_admin();
 $message = '';
 $action = '';
+$ok = $_SESSION['flash_ok'] ?? ''; unset($_SESSION['flash_ok']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -157,6 +158,7 @@ $title = 'Rooms'; include 'header.php'; ?>
 </div>
 
 <?php if ($message) echo "<p class='s-alert'>" . h($message) . "</p>"; ?>
+<?php if ($ok) echo "<p class='s-alert ok'>" . h($ok) . "</p>"; ?>
 
 <div class="s-kpis">
     <div class="s-kpi"><small>Classrooms</small><b><?= count($rooms) ?></b><em>Across <?= count($buildings) ?> building<?= count($buildings) === 1 ? '' : 's' ?></em></div>
@@ -175,6 +177,7 @@ $title = 'Rooms'; include 'header.php'; ?>
         <option value="">All statuses</option>
         <option>In use</option><option>Available</option><option>Late time-in</option>
     </select>
+    <form method="post" action="send_reminders.php"><?= csrf_field() ?><button type="submit" class="s-btn soft" title="Email sections that have not timed in">Send reminders</button></form>
     <button type="button" class="s-btn" data-open="formModal">+ Add room</button>
 </div>
 

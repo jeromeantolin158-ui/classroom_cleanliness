@@ -49,7 +49,7 @@ for ($i = 0; $i < 7; $i++) {
 
 $ratingRows = function (DateTime $a, DateTime $z) use ($pdo, $bFilter, $NB) {
     $s = $pdo->prepare("
-        SELECT u.usage_date, rt.score, COALESCE(rm.building, '$NB') AS building, sec.section_id, sec.section_name
+        SELECT u.usage_date, rt.score, COALESCE(rm.building, '$NB') AS building, rm.room_id, rm.room_number, sec.section_id, sec.section_name
         FROM ratings rt
         JOIN room_usage u ON u.usage_id = rt.usage_id
         JOIN schedules sc ON sc.schedule_id = u.schedule_id
@@ -76,6 +76,20 @@ foreach ($rows as $r) {
     $bs[$b] ??= ['secs' => [], 'started' => 0, 'ontime' => 0, 'n' => 0, 'sum' => 0];
     $bs[$b]['n']++; $bs[$b]['sum'] += (int)$r['score'];
 }
+// room ranking: cleanest 3 and dirtiest 3 (the two lists never share a room)
+$perRoom = [];
+foreach ($rows as $r) {
+    $x = &$perRoom[$r['room_id']];
+    $x['name'] = 'Room ' . $r['room_number']; $x['b'] = $r['building'];
+    $x['n'] = ($x['n'] ?? 0) + 1; $x['sum'] = ($x['sum'] ?? 0) + (int)$r['score'];
+    unset($x);
+}
+foreach ($perRoom as &$p) $p['a'] = $p['sum'] / $p['n'];
+unset($p);
+uasort($perRoom, fn($a, $b) => [$b['a'], $b['n']] <=> [$a['a'], $a['n']]);
+$ranked = array_values($perRoom);
+$cleanest = array_slice($ranked, 0, 3);
+$dirtiest = array_reverse(array_slice(array_slice($ranked, 3), -3));
 // best section
 $best = null;
 foreach ($perSec as $p) { $a = $p['sum'] / $p['n']; if ($best === null || $a > $best['a'] || ($a == $best['a'] && $p['n'] > $best['n'])) $best = ['name' => $p['name'], 'a' => $a, 'n' => $p['n']]; }
@@ -153,6 +167,26 @@ include 'header.php'; ?>
         <div class="w-hi plain"><b>Best-rated section<?= $best ? ' · ' . h($best['name']) : '' ?></b><small><?= $best ? number_format($best['a'], 1) . ' / 5 average this week' : 'No ratings yet this week' ?></small></div>
     </aside>
 </div>
+
+<section class="a-card">
+    <h3>Room ranking</h3>
+    <p class="s-muted">Average rating this week. Rooms with more ratings rank higher when scores tie.</p>
+    <div class="rk-grid">
+        <?php foreach ([['Cleanest rooms', $cleanest, 'good'], ['Needs attention', $dirtiest, 'bad']] as [$label, $list, $cls]): ?>
+        <div>
+            <div class="rk-title"><?= $label ?></div>
+            <?php if (!$list): ?><p class="s-muted">Not enough rated rooms yet.</p><?php endif; ?>
+            <?php foreach ($list as $i => $p): ?>
+            <div class="rk-row">
+                <span class="rk-n"><?= $i + 1 ?></span>
+                <div><b><?= h($p['name']) ?></b><small><?= h($p['b']) ?> &middot; <?= $p['n'] ?> rating<?= $p['n'] === 1 ? '' : 's' ?></small></div>
+                <em class="rk-<?= $cls ?>"><?= number_format($p['a'], 1) ?></em>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</section>
 
 <section class="a-card">
     <h3>Building performance</h3>
