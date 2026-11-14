@@ -14,14 +14,19 @@ Admins manage rooms, sections, schedules and users, and read ratings, reports an
 - Security: CSRF tokens, hashed passwords, forced password change for temporary passwords, admin-approved password resets
 
 ## Setup
-1. Create the PostgreSQL database and run your schema.
-2. Copy `db.example.php` to `db.local.php` and fill in a **limited** DB user (never `postgres`).
-3. Run `email.sql`, then copy `mail.example.php` to `mail.local.php` (Gmail app password) to enable emails.
-4. Serve the folder with Apache/XAMPP or `php -S localhost:8000`.
+Needs PHP 8.3 and PostgreSQL 15 or newer.
+1. Create an empty database `classroom_cleanliness` and run `database/schema.sql` in it.
+2. Run `database/create_admin.sql` (first login: `admin` / `ChangeMe123`, you must change it).
+3. Optional demo data: run `database/seed_demo.sql` (section accounts use the password `Password123`).
+4. Create the limited database user (commands at the end of `schema.sql`), never use the `postgres` superuser.
+5. Copy `db.example.php` to `db.local.php` and fill in that user.
+6. Optional emails: copy `mail.example.php` to `mail.local.php` (Gmail app password) and set `enabled` to `true`.
+7. Serve the folder with Apache/XAMPP or `php -S localhost:8000`.
 
 ## Files
 | File | Purpose |
 |---|---|
+| `database/` | `schema.sql`, `create_admin.sql`, `seed_demo.sql` |
 | `db.php` | connection + login/CSRF helpers |
 | `lib.php` | shared helpers (`require_admin`, `require_student`, `week_bounds`, `icon`) |
 | `header*.php`, `footer*.php` | page frame (admin / student) |
