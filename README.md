@@ -11,6 +11,7 @@ Admins manage rooms, sections, schedules and users, and read ratings, reports an
 - Admin: rooms with live status, sections, schedules, users, latest ratings, weekly report
 - Email: missed time-in reminders (PHPMailer + Gmail SMTP), logged so nobody is emailed twice
 - Analytics: weekly report with room ranking (cleanest / needs attention), building performance, daily trend
+- API: read-only JSON endpoints for ratings and room ranking (see [API.md](API.md))
 - Security: CSRF tokens, hashed passwords, forced password change for temporary passwords, admin-approved password resets
 
 ## Setup
@@ -27,6 +28,7 @@ Needs PHP 8.3 and PostgreSQL 15 or newer.
 | File | Purpose |
 |---|---|
 | `database/` | `schema.sql`, `create_admin.sql`, `seed_demo.sql` |
+| `api/` | JSON API (`ratings.php`, `room_ranking.php`), documented in `API.md` |
 | `db.php` | connection + login/CSRF helpers |
 | `lib.php` | shared helpers (`require_admin`, `require_student`, `week_bounds`, `icon`) |
 | `header*.php`, `footer*.php` | page frame (admin / student) |

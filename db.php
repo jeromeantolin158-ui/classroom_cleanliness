@@ -4,13 +4,22 @@ date_default_timezone_set('Asia/Manila');
 session_set_cookie_params([
     'httponly' => true,
     'samesite' => 'Lax',
+    // Send the login cookie over HTTPS only (also behind a hosting proxy that terminates HTTPS).
+    'secure'   => !empty($_SERVER['HTTPS']) || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https',
 ]);
 session_start();
-$cfg = __DIR__ . '/db.local.php';
-if (!is_file($cfg)) { http_response_code(500); exit('Missing db.local.php (copy db.example.php).'); }
-$c = require $cfg;
+
+// Database settings come from environment variables (hosting) or from db.local.php (your computer). Never commit secrets.
+if (getenv('DB_HOST')) {
+    $c = ['host' => getenv('DB_HOST'), 'port' => getenv('DB_PORT') ?: 5432, 'name' => getenv('DB_NAME'),
+          'user' => getenv('DB_USER'), 'pass' => getenv('DB_PASS'), 'sslmode' => getenv('DB_SSLMODE') ?: 'prefer'];
+} else {
+    $cfg = __DIR__ . '/db.local.php';
+    if (!is_file($cfg)) { http_response_code(500); exit('Missing db.local.php (copy db.example.php).'); }
+    $c = require $cfg;
+}
 $pdo = new PDO(
-    "pgsql:host={$c['host']};port={$c['port']};dbname={$c['name']}",
+    "pgsql:host={$c['host']};port={$c['port']};dbname={$c['name']};sslmode=" . ($c['sslmode'] ?? 'prefer'),
     $c['user'],
     $c['pass'],
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
