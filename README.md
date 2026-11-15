@@ -3,6 +3,8 @@
 Section accounts time in/out of a room and rate how clean the previous class left it.
 Admins manage rooms, sections, schedules and users, and read ratings, reports and analytics.
 
+**Live demo:** https://spotless-8zhe.onrender.com (free hosting, the first visit can take about a minute to wake up)
+
 **Stack:** PHP 8.3 · PostgreSQL (PDO) · vanilla JS/CSS · works on phones.
 
 ## Features

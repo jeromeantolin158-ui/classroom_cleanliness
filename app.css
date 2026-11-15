@@ -1,4 +1,3 @@
-
 /* ========================================
    GREEN ROOM MANAGEMENT SYSTEM
    Modern Professional Theme
@@ -547,8 +546,13 @@ h1.title {
 
 @media (max-width: 899px) {
   .s-tabs { overflow-x: auto; }
-  .s-tabs a, .s-tabs button { min-width: 68px; }
-  .s-tabs form { flex: 0 0 auto; }
+  .s-tabs a, .s-tabs button { min-width: 0; }
+  .s-tabs form { flex: 1 1 0; min-width: 0; }
+  .s-tabs a, .s-tabs button { flex: 1 1 0; min-width: 0; }
+}
+@media (max-width: 480px) {
+  .s-tabs a, .s-tabs button { font-size: .6rem; padding: 6px 0; }
+  .s-tabs .s-ic { width: 20px; height: 20px; }
 }
 .s-right { display: flex; align-items: center; gap: 12px; }
 .bell-wrap { position: relative; }
@@ -725,3 +729,14 @@ body.adm .a-bar form .s-btn, body.adm .a-bar form + .s-btn{margin-left:0}
 .rk-row em{font-style:normal;font-weight:700;font-size:1.05rem}
 .rk-good{color:#16834a}.rk-bad{color:#b45309}
 @media (max-width:700px){.rk-grid{grid-template-columns:1fr;gap:18px}}
+
+/* Phones: a wide child must never stretch the page (the browser would zoom out) */
+@media (max-width: 899px) {
+  .d-grid { grid-template-columns: minmax(0, 1fr); }
+  .d-card, .d-grid > *, .w-grid > * { min-width: 0; }
+  .d-rooms { overflow-x: auto; }
+  .d-counts { gap: 24px; flex-wrap: wrap; }
+  .d-card h3 { flex-wrap: wrap; }
+  .d-filter, .d-filter select { max-width: 100%; }
+}
+@media (max-width: 340px) { .s-tabs a, .s-tabs button { font-size: .54rem; } }
