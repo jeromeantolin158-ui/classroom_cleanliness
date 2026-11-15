@@ -9,8 +9,13 @@ session_set_cookie_params([
 ]);
 session_start();
 
-// Database settings come from environment variables (hosting) or from db.local.php (your computer). Never commit secrets.
-if (getenv('DB_HOST')) {
+// Database settings come from environment variables (hosting: DATABASE_URL, or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS/DB_SSLMODE) or from db.local.php (your computer). Never commit secrets.
+if (getenv('DATABASE_URL')) {                       // one connection string, e.g. the one Neon shows (use the non-pooled one)
+    $u = parse_url(getenv('DATABASE_URL'));
+    parse_str($u['query'] ?? '', $q);
+    $c = ['host' => $u['host'] ?? '', 'port' => $u['port'] ?? 5432, 'name' => ltrim($u['path'] ?? '', '/'),
+          'user' => urldecode($u['user'] ?? ''), 'pass' => urldecode($u['pass'] ?? ''), 'sslmode' => $q['sslmode'] ?? 'require'];
+} elseif (getenv('DB_HOST')) {
     $c = ['host' => getenv('DB_HOST'), 'port' => getenv('DB_PORT') ?: 5432, 'name' => getenv('DB_NAME'),
           'user' => getenv('DB_USER'), 'pass' => getenv('DB_PASS'), 'sslmode' => getenv('DB_SSLMODE') ?: 'prefer'];
 } else {

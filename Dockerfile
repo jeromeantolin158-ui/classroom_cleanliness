@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
 # Never show PHP errors to visitors
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
+# Silence Apache's "fully qualified domain name" warning
+RUN echo "ServerName localhost" > /etc/apache2/conf-available/servername.conf && a2enconf servername
+
 COPY . /var/www/html/
 
 # Hosting platforms give the port in $PORT; Apache must listen on it
